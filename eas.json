@@ -1,0 +1,29 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote",
+    "requireCommit": false
+  },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "environment": "production",
+      "autoIncrement": true
+    },
+    "preview": {
+      "distribution": "internal",
+      "environment": "production",
+      "ios": {
+        "simulator": false
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "language": "tr",
+        "appName": "Hukuk Masraf"
+      }
+    }
+  }
+}

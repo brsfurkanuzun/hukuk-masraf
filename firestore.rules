@@ -1,0 +1,179 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function stringBetween(value, min, max) {
+      return value is string && value.size() >= min && value.size() <= max;
+    }
+
+    function attachmentOk(att) {
+      return att is map
+        && att.fileSize is number
+        && att.fileSize > 0
+        && att.fileSize <= 15728640
+        && att.url is string
+        && att.url.size() <= 2048
+        && att.id is string
+        && att.id.size() <= 80;
+    }
+
+    function attachmentsOk(list) {
+      return list is list
+        && list.size() <= 8
+        && (list.size() < 1 || attachmentOk(list[0]))
+        && (list.size() < 2 || attachmentOk(list[1]))
+        && (list.size() < 3 || attachmentOk(list[2]))
+        && (list.size() < 4 || attachmentOk(list[3]))
+        && (list.size() < 5 || attachmentOk(list[4]))
+        && (list.size() < 6 || attachmentOk(list[5]))
+        && (list.size() < 7 || attachmentOk(list[6]))
+        && (list.size() < 8 || attachmentOk(list[7]));
+    }
+
+    function itemOk(item) {
+      return item is map
+        && item.amountKurus is int
+        && item.amountKurus >= 0
+        && item.amountKurus <= 100000000000
+        && item.type is string
+        && attachmentsOk(item.attachments);
+    }
+
+    function itemsOk(list) {
+      return list is list
+        && list.size() >= 1
+        && list.size() <= 20
+        && (list.size() < 1 || itemOk(list[0]))
+        && (list.size() < 2 || itemOk(list[1]))
+        && (list.size() < 3 || itemOk(list[2]))
+        && (list.size() < 4 || itemOk(list[3]))
+        && (list.size() < 5 || itemOk(list[4]))
+        && (list.size() < 6 || itemOk(list[5]))
+        && (list.size() < 7 || itemOk(list[6]))
+        && (list.size() < 8 || itemOk(list[7]))
+        && (list.size() < 9 || itemOk(list[8]))
+        && (list.size() < 10 || itemOk(list[9]))
+        && (list.size() < 11 || itemOk(list[10]))
+        && (list.size() < 12 || itemOk(list[11]))
+        && (list.size() < 13 || itemOk(list[12]))
+        && (list.size() < 14 || itemOk(list[13]))
+        && (list.size() < 15 || itemOk(list[14]))
+        && (list.size() < 16 || itemOk(list[15]))
+        && (list.size() < 17 || itemOk(list[16]))
+        && (list.size() < 18 || itemOk(list[17]))
+        && (list.size() < 19 || itemOk(list[18]))
+        && (list.size() < 20 || itemOk(list[19]));
+    }
+
+    function expenseOk(data) {
+        return data.keys().hasOnly([
+          'ownerId',
+          'userId',
+          'expenseDate',
+          'clientName',
+          'clientNameNormalized',
+          'debtorName',
+          'enforcementOffice',
+          'enforcementOfficeNormalized',
+          'fileCaseNumber',
+          'fileCaseNumberNormalized',
+          'instructionNumber',
+          'note',
+          'expenseItems',
+          'totalAmountKurus',
+          'currency',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && data.userId == request.auth.uid
+        && data.expenseDate is string
+        && data.expenseDate.size() == 10
+        && stringBetween(data.clientName, 2, 200)
+        && stringBetween(data.clientNameNormalized, 2, 200)
+        && data.debtorName is string
+        && data.debtorName.size() <= 200
+        && data.enforcementOffice is string
+        && data.enforcementOffice.size() <= 200
+        && data.enforcementOfficeNormalized is string
+        && data.enforcementOfficeNormalized.size() <= 200
+        && stringBetween(data.fileCaseNumber, 1, 100)
+        && stringBetween(data.fileCaseNumberNormalized, 1, 100)
+        && data.instructionNumber is string
+        && data.instructionNumber.size() <= 100
+        && data.note is string
+        && data.note.size() <= 500
+        && itemsOk(data.expenseItems)
+        && data.totalAmountKurus is int
+        && data.totalAmountKurus >= 0
+        && data.currency == 'TRY'
+        && data.createdAt is string
+        && data.createdAt.size() == 24
+        && data.updatedAt is string
+        && data.updatedAt.size() == 24;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'firstName', 'lastName', 'createdAt'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 200
+        && (!request.resource.data.keys().hasAny(['firstName']) || stringBetween(request.resource.data.firstName, 1, 80))
+        && (!request.resource.data.keys().hasAny(['lastName']) || stringBetween(request.resource.data.lastName, 1, 80))
+        && request.resource.data.createdAt is string;
+      allow update: if isOwner(userId)
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'firstName', 'lastName', 'createdAt'])
+        && (!request.resource.data.keys().hasAny(['firstName']) || stringBetween(request.resource.data.firstName, 1, 80))
+        && (!request.resource.data.keys().hasAny(['lastName']) || stringBetween(request.resource.data.lastName, 1, 80));
+      allow delete: if false;
+
+      match /meta/{docId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && docId == 'suggestions'
+          && request.resource.data.keys().hasOnly(['enforcementOffices', 'clientNames', 'updatedAt'])
+          && request.resource.data.enforcementOffices is list
+          && request.resource.data.enforcementOffices.size() <= 200
+          && request.resource.data.clientNames is list
+          && request.resource.data.clientNames.size() <= 200
+          && request.resource.data.updatedAt is string;
+        allow delete: if false;
+      }
+    }
+
+    match /catalog/{docId} {
+      allow get: if signedIn() && docId == 'expenseTypes';
+      allow list, create, update, delete: if false;
+    }
+
+    match /usernames/{usernameId} {
+      allow get: if usernameId.matches('^[\\p{L}\\p{N}._-]{2,32}$') && usernameId != '..';
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if signedIn() && expenseOk(request.resource.data);
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && (!resource.data.keys().hasAny(['userId']) || request.resource.data.userId == resource.data.userId)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && expenseOk(request.resource.data);
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+  }
+}
