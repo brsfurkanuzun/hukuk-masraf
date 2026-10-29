@@ -45,7 +45,7 @@ export default function LoginScreen() {
         <FieldGroup modifiers={loginFormModifiers}>
           <FieldGroup.Section>
             <FieldGroup.SectionHeader>
-              <Text textStyle={{ color: colors.ink, fontSize: typeScale.label, fontWeight: '700' }}>Masraf Defteri</Text>
+              <Text textStyle={{ color: colors.ink, fontSize: typeScale.label, fontWeight: '700' }}>Tohumcu Hukuk</Text>
             </FieldGroup.SectionHeader>
             <TextField
               label="E-posta"

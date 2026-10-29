@@ -75,15 +75,23 @@ export async function loadUserName(uid: string): Promise<UserName> {
   return { firstName: first, lastName: rest.join(' ') };
 }
 
+export async function loadUserNames(uids: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(uids.filter((uid) => uid.length > 0))];
+  const entries = await Promise.all(
+    unique.map(async (uid) => {
+      const name = await loadUserName(uid);
+      return [uid, formatLawyerName(name)] as const;
+    }),
+  );
+  return Object.fromEntries(entries.filter((entry) => entry[1].length > 0));
+}
+
 export function formatLawyerName(name: UserName): string {
   const full = [name.firstName, name.lastName]
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
     .join(' ');
-  if (!full) {
-    return 'AV.';
-  }
-  return `AV. ${full.toLocaleUpperCase('tr-TR')}`;
+  return full;
 }
 
 function textField(value: unknown): string {

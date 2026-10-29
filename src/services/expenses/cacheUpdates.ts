@@ -81,15 +81,20 @@ export function findExpenseInPages(data: InfiniteData<ExpensePage> | undefined, 
 }
 
 export function planFromQueryKey(queryKey: QueryKey): QueryPlan | null {
-  const plan = queryKey[3];
+  const plan = queryKey[4];
   if (!plan || typeof plan !== 'object' || !('mode' in plan)) {
     return null;
   }
   return plan as QueryPlan;
 }
 
-export function findExpenseInListCache(queryClient: QueryClient, uid: string, expenseId: string): Expense | undefined {
-  const entries = queryClient.getQueriesData<InfiniteData<ExpensePage>>({ queryKey: ['expenses', uid, 'list'] });
+export function findExpenseInListCache(
+  queryClient: QueryClient,
+  uid: string,
+  dosyaId: string,
+  expenseId: string,
+): Expense | undefined {
+  const entries = queryClient.getQueriesData<InfiniteData<ExpensePage>>({ queryKey: ['expenses', uid, dosyaId, 'list'] });
   for (const [, data] of entries) {
     const found = findExpenseInPages(data, expenseId);
     if (found) {
@@ -102,9 +107,10 @@ export function findExpenseInListCache(queryClient: QueryClient, uid: string, ex
 export function updateExpenseListCaches(
   queryClient: QueryClient,
   uid: string,
+  dosyaId: string,
   updater: (current: InfiniteData<ExpensePage> | undefined, plan: QueryPlan) => InfiniteData<ExpensePage> | undefined,
 ): void {
-  const entries = queryClient.getQueriesData<InfiniteData<ExpensePage>>({ queryKey: ['expenses', uid, 'list'] });
+  const entries = queryClient.getQueriesData<InfiniteData<ExpensePage>>({ queryKey: ['expenses', uid, dosyaId, 'list'] });
   for (const [queryKey, data] of entries) {
     const plan = planFromQueryKey(queryKey);
     if (!plan) {
@@ -114,19 +120,19 @@ export function updateExpenseListCaches(
   }
 }
 
-export function cacheCreatedExpense(queryClient: QueryClient, expense: Expense): void {
-  queryClient.setQueryData(['expense', expense.ownerId, expense.id], expense);
-  updateExpenseListCaches(queryClient, expense.ownerId, (current, plan) => prependExpense(current, expense, plan));
+export function cacheCreatedExpense(queryClient: QueryClient, uid: string, expense: Expense): void {
+  queryClient.setQueryData(['expense', uid, expense.dosyaId, expense.id], expense);
+  updateExpenseListCaches(queryClient, uid, expense.dosyaId, (current, plan) => prependExpense(current, expense, plan));
 }
 
-export function cacheUpdatedExpense(queryClient: QueryClient, expense: Expense): void {
-  queryClient.setQueryData(['expense', expense.ownerId, expense.id], expense);
-  updateExpenseListCaches(queryClient, expense.ownerId, (current, plan) => replaceExpense(current, expense, plan));
+export function cacheUpdatedExpense(queryClient: QueryClient, uid: string, expense: Expense): void {
+  queryClient.setQueryData(['expense', uid, expense.dosyaId, expense.id], expense);
+  updateExpenseListCaches(queryClient, uid, expense.dosyaId, (current, plan) => replaceExpense(current, expense, plan));
 }
 
-export function cacheDeletedExpense(queryClient: QueryClient, uid: string, expenseId: string): void {
-  queryClient.removeQueries({ queryKey: ['expense', uid, expenseId], exact: true });
-  updateExpenseListCaches(queryClient, uid, (current) => removeExpense(current, expenseId));
+export function cacheDeletedExpense(queryClient: QueryClient, uid: string, dosyaId: string, expenseId: string): void {
+  queryClient.removeQueries({ queryKey: ['expense', uid, dosyaId, expenseId], exact: true });
+  updateExpenseListCaches(queryClient, uid, dosyaId, (current) => removeExpense(current, expenseId));
 }
 
 export function cursorForPage(items: Expense[], pageSize: number): ExpenseCursor | null {

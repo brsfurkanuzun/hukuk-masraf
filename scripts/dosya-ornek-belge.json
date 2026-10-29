@@ -1,0 +1,15 @@
+{
+  "_aciklama": "Firebase Console → Firestore → dosyalar → Add document. Belge ID: ornek-dosya-1 (veya otomatik). Alan tiplerine dikkat: assignedUserIds = array.",
+  "ownerId": "BvXHkpJNNmb0A7xTtArt0tANx8F2",
+  "assignedUserIds": ["BvXHkpJNNmb0A7xTtArt0tANx8F2"],
+  "clientName": "Örnek Müvekkil A.Ş.",
+  "clientNameNormalized": "örnek müvekkil a.ş.",
+  "debtorName": "Örnek Borçlu",
+  "enforcementOffice": "İstanbul Anadolu İcra Dairesi",
+  "enforcementOfficeNormalized": "i̇stanbul anadolu icra dairesi",
+  "fileCaseNumber": "00012/2026",
+  "fileCaseNumberNormalized": "00012/2026",
+  "instructionNumber": "",
+  "createdAt": "2026-10-29T19:00:00.000Z",
+  "updatedAt": "2026-10-29T19:00:00.000Z"
+}

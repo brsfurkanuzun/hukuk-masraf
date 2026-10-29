@@ -55,6 +55,17 @@ export const expenseItemFormSchema = z
     }
   });
 
+export const expenseEntryFormSchema = z.object({
+  expenseDate: z.string().refine(isIsoDate, 'Geçerli bir tarih seçin'),
+  note: z.string().trim().max(MAX_NOTE_LENGTH, 'Not en fazla 500 karakter olabilir'),
+  items: z
+    .array(expenseItemFormSchema)
+    .min(1, 'En az bir masraf kalemi ekleyin')
+    .max(MAX_EXPENSE_ITEMS, 'En fazla 20 masraf kalemi eklenebilir'),
+});
+
+export type ExpenseEntryFormValues = z.infer<typeof expenseEntryFormSchema>;
+
 export const expenseFormSchema = z
   .object({
     expenseDate: z.string().refine(isIsoDate, 'Geçerli bir tarih seçin'),

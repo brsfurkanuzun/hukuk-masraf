@@ -25,6 +25,7 @@ export interface ExpenseItem {
 
 export interface Expense {
   id: string;
+  dosyaId: string;
   ownerId: string;
   userId: string;
   expenseDate: string;

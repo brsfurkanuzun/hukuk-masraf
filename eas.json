@@ -22,7 +22,7 @@
     "production": {
       "ios": {
         "language": "tr",
-        "appName": "Hukuk Masraf"
+        "appName": "Tohumcu Hukuk"
       }
     }
   }

@@ -40,7 +40,7 @@ service cloud.firestore {
 
     function itemOk(item) {
       return item is map
-        && item.amountKurus is int
+        && (item.amountKurus is int || item.amountKurus is float)
         && item.amountKurus >= 0
         && item.amountKurus <= 100000000000
         && item.type is string
@@ -74,6 +74,35 @@ service cloud.firestore {
     }
 
     function expenseOk(data) {
+        return data.keys().hasOnly([
+          'ownerId',
+          'userId',
+          'expenseDate',
+          'note',
+          'expenseItems',
+          'totalAmountKurus',
+          'currency',
+          'createdAt',
+          'updatedAt',
+          'deletedAt'
+        ])
+        && data.userId == request.auth.uid
+        && (!data.keys().hasAny(['deletedAt']) || (data.deletedAt is string && data.deletedAt.size() == 24))
+        && data.expenseDate is string
+        && data.expenseDate.size() == 10
+        && data.note is string
+        && data.note.size() <= 500
+        && itemsOk(data.expenseItems)
+        && (data.totalAmountKurus is int || data.totalAmountKurus is float)
+        && data.totalAmountKurus >= 0
+        && data.currency == 'TRY'
+        && data.createdAt is string
+        && data.createdAt.size() == 24
+        && data.updatedAt is string
+        && data.updatedAt.size() == 24;
+    }
+
+    function legacyExpenseOk(data) {
         return data.keys().hasOnly([
           'ownerId',
           'userId',
@@ -112,7 +141,7 @@ service cloud.firestore {
         && data.note is string
         && data.note.size() <= 500
         && itemsOk(data.expenseItems)
-        && data.totalAmountKurus is int
+        && (data.totalAmountKurus is int || data.totalAmountKurus is float)
         && data.totalAmountKurus >= 0
         && data.currency == 'TRY'
         && data.createdAt is string
@@ -121,8 +150,109 @@ service cloud.firestore {
         && data.updatedAt.size() == 24;
     }
 
+    function dosyaDoc(dosyaId) {
+      return get(/databases/$(database)/documents/dosyalar/$(dosyaId));
+    }
+
+    function canAccessDosya(dosyaId) {
+      let d = dosyaDoc(dosyaId).data;
+      return canAccessDosyaData(d);
+    }
+
+    function canAccessDosyaData(d) {
+      return signedIn()
+        && (request.auth.uid == d.ownerId || request.auth.uid in d.assignedUserIds);
+    }
+
+    function dosyaOk(data) {
+      return data.keys().hasOnly([
+          'ownerId',
+          'assignedUserIds',
+          'clientName',
+          'clientNameNormalized',
+          'debtorName',
+          'enforcementOffice',
+          'enforcementOfficeNormalized',
+          'fileCaseNumber',
+          'fileCaseNumberNormalized',
+          'instructionNumber',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && data.assignedUserIds is list
+        && data.assignedUserIds.size() <= 50
+        && stringBetween(data.clientName, 2, 200)
+        && stringBetween(data.clientNameNormalized, 2, 200)
+        && data.debtorName is string
+        && data.debtorName.size() <= 200
+        && data.enforcementOffice is string
+        && data.enforcementOffice.size() <= 200
+        && data.enforcementOfficeNormalized is string
+        && data.enforcementOfficeNormalized.size() <= 200
+        && stringBetween(data.fileCaseNumber, 1, 100)
+        && stringBetween(data.fileCaseNumberNormalized, 1, 100)
+        && data.instructionNumber is string
+        && data.instructionNumber.size() <= 100
+        && data.createdAt is string
+        && data.createdAt.size() == 24
+        && data.updatedAt is string
+        && data.updatedAt.size() == 24;
+    }
+
+    function expenseInDosyaOk(dosyaId, data) {
+      let d = dosyaDoc(dosyaId).data;
+      return expenseOk(data)
+        && data.ownerId == d.ownerId;
+    }
+
+    function keepsDeletedAt() {
+      return !resource.data.keys().hasAny(['deletedAt'])
+        || !(resource.data.deletedAt is string)
+        || (
+          request.resource.data.keys().hasAny(['deletedAt'])
+          && request.resource.data.deletedAt == resource.data.deletedAt
+        );
+    }
+
+    function softDeleteOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedAt', 'updatedAt'])
+        && request.resource.data.deletedAt is string
+        && request.resource.data.deletedAt.size() == 24
+        && request.resource.data.updatedAt == request.resource.data.deletedAt
+        && (!resource.data.keys().hasAny(['deletedAt']) || !(resource.data.deletedAt is string));
+    }
+
+    function tutanakOk(data) {
+      return data.keys().hasOnly([
+          'ownerId',
+          'userId',
+          'tutanakDate',
+          'content',
+          'attachments',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.userId == request.auth.uid
+        && data.tutanakDate is string
+        && data.tutanakDate.size() == 10
+        && stringBetween(data.content, 0, 8000)
+        && attachmentsOk(data.attachments)
+        && data.createdAt is string
+        && data.createdAt.size() == 24
+        && data.updatedAt is string
+        && data.updatedAt.size() == 24;
+    }
+
+    function tutanakInDosyaOk(dosyaId, data) {
+      let d = dosyaDoc(dosyaId).data;
+      return tutanakOk(data)
+        && data.ownerId == d.ownerId;
+    }
+
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      allow get: if signedIn();
+      allow list: if false;
       allow create: if isOwner(userId)
         && request.resource.data.keys().hasOnly(['email', 'displayName', 'firstName', 'lastName', 'createdAt'])
         && request.resource.data.email == request.auth.token.email
@@ -141,16 +271,60 @@ service cloud.firestore {
 
       match /meta/{docId} {
         allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId)
-          && docId == 'suggestions'
-          && request.resource.data.keys().hasOnly(['enforcementOffices', 'clientNames', 'updatedAt'])
-          && request.resource.data.enforcementOffices is list
-          && request.resource.data.enforcementOffices.size() <= 200
-          && request.resource.data.clientNames is list
-          && request.resource.data.clientNames.size() <= 200
-          && request.resource.data.updatedAt is string;
+        allow create, update: if isOwner(userId) && (
+          (
+            docId == 'suggestions'
+            && request.resource.data.keys().hasOnly(['enforcementOffices', 'clientNames', 'updatedAt'])
+            && request.resource.data.enforcementOffices is list
+            && request.resource.data.enforcementOffices.size() <= 200
+            && request.resource.data.clientNames is list
+            && request.resource.data.clientNames.size() <= 200
+            && request.resource.data.updatedAt is string
+          ) || (
+            docId == 'noticeState'
+            && request.resource.data.keys().hasOnly(['lastReadAt'])
+            && request.resource.data.lastReadAt is string
+            && request.resource.data.lastReadAt.size() == 24
+          )
+        );
         allow delete: if false;
       }
+
+      match /notifications/{noticeId} {
+        allow read: if isOwner(userId);
+        allow create, update, delete: if false;
+      }
+
+      match /pushTokens/{tokenId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && tokenId.matches('^[a-f0-9]{32}$')
+          && request.resource.data.keys().hasOnly(['expoPushToken', 'updatedAt'])
+          && request.resource.data.expoPushToken is string
+          && request.resource.data.expoPushToken.size() >= 16
+          && request.resource.data.expoPushToken.size() <= 200
+          && request.resource.data.updatedAt is string
+          && request.resource.data.updatedAt.size() == 24;
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /tutanakNotices/{noticeId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.recipientIds;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['dosyaId', 'actorId', 'actorName', 'debtorName', 'recipientIds', 'createdAt'])
+        && request.resource.data.actorId == request.auth.uid
+        && stringBetween(request.resource.data.dosyaId, 1, 80)
+        && canAccessDosya(request.resource.data.dosyaId)
+        && stringBetween(request.resource.data.actorName, 1, 120)
+        && request.resource.data.debtorName is string
+        && request.resource.data.debtorName.size() <= 200
+        && request.resource.data.recipientIds is list
+        && request.resource.data.recipientIds.size() > 0
+        && request.resource.data.recipientIds.size() <= 50
+        && request.resource.data.createdAt is string
+        && request.resource.data.createdAt.size() == 24;
+      allow update, delete: if false;
     }
 
     match /catalog/{docId} {
@@ -164,15 +338,53 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /dosyalar/{dosyaId} {
+      allow read: if canAccessDosyaData(resource.data);
+      allow create: if signedIn() && dosyaOk(request.resource.data);
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && dosyaOk(request.resource.data);
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      match /expenses/{expenseId} {
+        allow read: if canAccessDosya(dosyaId);
+        allow create: if canAccessDosya(dosyaId) && expenseInDosyaOk(dosyaId, request.resource.data);
+        allow update: if canAccessDosya(dosyaId) && (
+          softDeleteOnly()
+          || (
+            resource.data.ownerId == request.resource.data.ownerId
+            && resource.data.userId == request.resource.data.userId
+            && request.resource.data.createdAt == resource.data.createdAt
+            && keepsDeletedAt()
+            && expenseInDosyaOk(dosyaId, request.resource.data)
+          )
+        );
+        allow delete: if false;
+      }
+
+      match /tutanaklar/{tutanakId} {
+        allow read: if canAccessDosya(dosyaId);
+        allow create: if canAccessDosya(dosyaId) && tutanakInDosyaOk(dosyaId, request.resource.data);
+        allow update: if canAccessDosya(dosyaId)
+          && resource.data.ownerId == request.resource.data.ownerId
+          && resource.data.userId == request.resource.data.userId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && tutanakInDosyaOk(dosyaId, request.resource.data);
+        allow delete: if canAccessDosya(dosyaId);
+      }
+    }
+
     match /expenses/{expenseId} {
       allow read: if signedIn() && resource.data.ownerId == request.auth.uid;
-      allow create: if signedIn() && expenseOk(request.resource.data);
+      allow create: if false;
       allow update: if signedIn()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
         && (!resource.data.keys().hasAny(['userId']) || request.resource.data.userId == resource.data.userId)
         && request.resource.data.createdAt == resource.data.createdAt
-        && expenseOk(request.resource.data);
+        && legacyExpenseOk(request.resource.data);
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
     }
   }

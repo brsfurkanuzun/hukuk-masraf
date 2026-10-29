@@ -1,5 +1,5 @@
-import { ExpenseForm } from '@/components/forms/ExpenseForm';
+import { Redirect } from 'expo-router';
 
-export default function NewExpenseScreen() {
-  return <ExpenseForm mode="create" />;
+export default function LegacyNewExpenseScreen() {
+  return <Redirect href="/" />;
 }

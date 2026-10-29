@@ -1,12 +1,8 @@
-import { Host } from '@expo/ui';
 import type { ReactNode } from 'react';
+import { View } from 'react-native';
 
 import { colors } from '@/constants/theme';
 
-export function ScreenHost({ children, fill = false }: { children: ReactNode; fill?: boolean }) {
-  return (
-    <Host style={{ flex: 1 }} colorScheme="light" seedColor={colors.navy} useViewportSizeMeasurement={fill}>
-      {children}
-    </Host>
-  );
+export function ScreenHost({ children }: { children: ReactNode; fill?: boolean }) {
+  return <View style={{ flex: 1, backgroundColor: colors.background }}>{children}</View>;
 }

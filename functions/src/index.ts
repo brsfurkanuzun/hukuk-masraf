@@ -3,7 +3,10 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { v2 as cloudinary } from 'cloudinary';
 
+import { notifyDosyaAssigned, notifyTutanakCreated } from './notifyTutanak';
 import { classifyUpload, isSafeDocumentId, ownsPublicId, publicIdFor, signCloudinaryParams } from './sign';
+
+export { notifyDosyaAssigned, notifyTutanakCreated };
 
 initializeApp();
 

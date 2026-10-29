@@ -3,10 +3,10 @@ import { buttonBorderShape, buttonStyle, controlSize, font, foregroundStyle, fra
 
 import { colors } from '@/constants/theme';
 
-export function ExpenseAddHeader({ onAdd }: { onAdd: () => void }) {
+export function ExpenseAddHeader({ onAdd, title = 'Masraflar' }: { onAdd: () => void; title?: string }) {
   return (
     <HStack alignment="center" modifiers={[frame({ maxWidth: Infinity })]}>
-      <Text modifiers={[font({ size: 13, weight: 'semibold' }), foregroundStyle(colors.muted)]}>Masraflar</Text>
+      <Text modifiers={[font({ size: 13, weight: 'semibold' }), foregroundStyle(colors.muted)]}>{title}</Text>
       <Spacer />
       <Button
         onPress={onAdd}

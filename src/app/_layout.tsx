@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { LaunchLogo } from '@/components/brand/LaunchLogo';
+import { NotificationOpen } from '@/components/notifications/NotificationOpen';
 import { colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import { queryClient } from '@/providers/queryClient';
@@ -38,6 +39,7 @@ function RootNavigator() {
           <Stack.Screen name="(auth)" />
         </Stack.Protected>
       </Stack>
+      {user ? <NotificationOpen /> : null}
       {intro ? <LaunchLogo onDone={finishIntro} /> : null}
     </View>
   );

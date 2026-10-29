@@ -18,5 +18,5 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ],
-  "exclude": ["functions", "node_modules"]
+  "exclude": ["functions", "node_modules", "hukuk-masraf"]
 }

@@ -17,10 +17,11 @@ import { toUserMessage } from '@/utils/errors';
 import { formatFileSize } from '@/utils/text';
 
 export default function PreviewScreen() {
-  const params = useLocalSearchParams<{ expenseId: string; attachmentId: string }>();
+  const params = useLocalSearchParams<{ dosyaId: string; expenseId: string; attachmentId: string }>();
+  const dosyaId = typeof params.dosyaId === 'string' ? params.dosyaId : '';
   const expenseId = typeof params.expenseId === 'string' ? params.expenseId : '';
   const attachmentId = typeof params.attachmentId === 'string' ? params.attachmentId : '';
-  const expenseQuery = useExpense(expenseId);
+  const expenseQuery = useExpense(dosyaId, expenseId);
   const attachment = expenseQuery.data?.expenseItems.flatMap((item) => item.attachments).find((item) => item.id === attachmentId) ?? null;
   const fileUrl = attachment?.url || null;
   const [localUri, setLocalUri] = useState<string | null>(null);

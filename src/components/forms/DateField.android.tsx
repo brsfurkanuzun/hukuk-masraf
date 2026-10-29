@@ -12,15 +12,16 @@ interface DateFieldProps {
   onChange: (isoDate: string) => void;
   error?: string;
   divider?: boolean;
+  framed?: boolean;
 }
 
-export function DateField({ label, value, onChange, error }: DateFieldProps) {
+export function DateField({ label, value, onChange, error, framed = false }: DateFieldProps) {
   const [open, setOpen] = useState(false);
   const date = value ? isoToLocalDate(value) : new Date();
   const shown = value ? formatTrDate(value) : 'Seç';
   return (
     <>
-      <Button variant="secondary" label={`${label}: ${shown}`} onPress={() => setOpen(true)} />
+      <Button variant="secondary" label={`${label}: ${shown}`} onPress={() => setOpen(true)} style={framed ? { width: '100%' } : undefined} />
       {open ? (
         <DatePickerDialog
           initialDate={date.toISOString()}

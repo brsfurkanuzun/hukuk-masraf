@@ -7,17 +7,17 @@ import { requestDeliveryUrl } from '@/services/cloudinary/cloudinaryClient';
 import { findExpenseInListCache } from '@/services/expenses/cacheUpdates';
 import { getExpense } from '@/services/expenses/expenseService';
 
-export function useExpense(expenseId: string) {
+export function useExpense(dosyaId: string, expenseId: string) {
   const { user } = useAuth();
   const uid = user?.uid ?? '';
   const queryClient = useQueryClient();
   return useQuery({
-    queryKey: ['expense', uid, expenseId],
-    enabled: Boolean(user && expenseId),
+    queryKey: ['expense', uid, dosyaId, expenseId],
+    enabled: Boolean(user && dosyaId && expenseId),
     staleTime: QUERY_STALE_TIME_MS,
-    queryFn: () => getExpense(uid, expenseId),
-    initialData: () => findExpenseInListCache(queryClient, uid, expenseId),
-    initialDataUpdatedAt: () => (findExpenseInListCache(queryClient, uid, expenseId) ? Date.now() : undefined),
+    queryFn: () => getExpense(uid, dosyaId, expenseId),
+    initialData: () => findExpenseInListCache(queryClient, uid, dosyaId, expenseId),
+    initialDataUpdatedAt: () => (findExpenseInListCache(queryClient, uid, dosyaId, expenseId) ? Date.now() : undefined),
   });
 }
 

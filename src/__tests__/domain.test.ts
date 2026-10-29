@@ -5,6 +5,7 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { parseExpenseTypeCatalog } from '@/constants/expenseTypes';
 import { PAGE_SIZE } from '@/constants/limits';
+import type { Dosya } from '@/models/dosya';
 import type { Expense } from '@/models/expense';
 import { expenseFormSchema } from '@/schemas/expenseSchema';
 import {
@@ -34,6 +35,7 @@ import { filterSuggestions, namesToAdd, normalizeSearchText, uniqueNames } from 
 function expense(overrides: Partial<Expense> = {}): Expense {
   return {
     id: 'expense-1',
+    dosyaId: 'dosya-1',
     ownerId: 'user-1',
     userId: 'user-1',
     expenseDate: '2026-10-25',
@@ -137,10 +139,30 @@ describe('expense form', () => {
         { id: 'item-5678', type: 'gida', customType: '', amount: '50,00', note: '', attachments: [] },
       ],
     });
+    const dosya: Dosya = {
+      id: 'dosya-1',
+      ownerId: 'user-1',
+      assignedUserIds: ['user-1'],
+      clientName: 'Ayşe Yılmaz',
+      clientNameNormalized: normalizeSearchText('Ayşe Yılmaz'),
+      debtorName: 'ABC Ltd.',
+      enforcementOffice: 'İstanbul Anadolu İcra Dairesi',
+      enforcementOfficeNormalized: normalizeSearchText('İstanbul Anadolu İcra Dairesi'),
+      fileCaseNumber: '00012/2024',
+      fileCaseNumberNormalized: '00012/2024',
+      instructionNumber: '004',
+      createdAt: '2026-10-25T10:00:00.000Z',
+      updatedAt: '2026-10-25T10:00:00.000Z',
+    };
     const record = formToExpense({
       id: 'expense-1234',
-      ownerId: 'user-1',
-      values,
+      dosya,
+      userId: 'user-1',
+      values: {
+        expenseDate: values.expenseDate,
+        note: values.note,
+        items: values.items,
+      },
       createdAt: '2026-10-25T10:00:00.000Z',
       updatedAt: '2026-10-25T10:00:00.000Z',
     });
@@ -200,14 +222,14 @@ describe('queries and cache', () => {
       defaultOptions: { queries: { gcTime: Number.POSITIVE_INFINITY } },
     });
     const record = expense();
-    client.setQueryData(['expenses', 'user-1', 'list', { mode: 'recent' }], {
+    client.setQueryData(['expenses', 'user-1', 'dosya-1', 'list', { mode: 'recent' }], {
       pages: [{ items: [], nextCursor: null }],
       pageParams: [null],
     });
-    cacheCreatedExpense(client, record);
-    const cached = client.getQueryData<{ pages: ExpensePage[] }>(['expenses', 'user-1', 'list', { mode: 'recent' }]);
+    cacheCreatedExpense(client, 'user-1', record);
+    const cached = client.getQueryData<{ pages: ExpensePage[] }>(['expenses', 'user-1', 'dosya-1', 'list', { mode: 'recent' }]);
     expect(cached?.pages[0]?.items[0]?.id).toBe('expense-1');
-    expect(client.getQueryData(['expense', 'user-1', 'expense-1'])).toMatchObject({ id: 'expense-1' });
+    expect(client.getQueryData(['expense', 'user-1', 'dosya-1', 'expense-1'])).toMatchObject({ id: 'expense-1' });
   });
 });
 

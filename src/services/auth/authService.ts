@@ -4,6 +4,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { resolveLoginEmail } from '@/services/auth/usernameService';
 import { normalizeUsername } from '@/utils/username';
 import { flushOrphanAssets, resetOrphanFlushGuard } from '@/services/cloudinary/flushOrphans';
+import { unregisterPushToken } from '@/services/notifications/pushRegistration';
 import { getFirebase } from '@/services/firebase/config';
 import { resetDocumentReadCount } from '@/services/firebase/readCounter';
 import { logError } from '@/utils/errors';
@@ -32,6 +33,7 @@ export async function signOutAndClear(queryClient: QueryClient): Promise<void> {
     } catch (error) {
       logError('sign-out-flush', error);
     }
+    await unregisterPushToken();
   }
   queryClient.cancelQueries();
   queryClient.clear();

@@ -2,33 +2,35 @@ import { FieldGroup, Host, Text } from '@expo/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { File } from 'expo-file-system';
 import { useNavigation, useRouter } from 'expo-router';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { Alert, Text as BarText, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppBackButton } from '@/components/common/AppBackButton';
 import { Button } from '@/components/common/Button';
+import { DetailRowsCard } from '@/components/common/DetailRowsCard';
 import { TextField } from '@/components/common/TextField';
-import { AutocompleteField } from '@/components/forms/AutocompleteField';
+import type { Dosya } from '@/models/dosya';
 import { DateField } from '@/components/forms/DateField';
 import { ExpenseAddHeader } from '@/components/forms/ExpenseAddHeader';
 import { ExpenseLineHeader, ExpenseLineRow, ExpenseLineTotal, type ExpenseCell } from '@/components/forms/ItemLinesTable';
 import { NativePhoto } from '@/components/native/NativePhoto';
 import { ScreenHost } from '@/components/native/ScreenHost';
 import { MAX_EXPENSE_ITEMS } from '@/constants/limits';
-import { colors, type as typeScale } from '@/constants/theme';
+import { colors, space, type as typeScale } from '@/constants/theme';
 import { useExpenseTypes } from '@/hooks/useExpenseTypes';
-import { useSuggestions } from '@/hooks/useSuggestions';
 import type { AttachmentMeta, Expense, LocalAttachment } from '@/models/expense';
 import { useAuth } from '@/providers/AuthProvider';
 import { queryClient } from '@/providers/queryClient';
-import { expenseFormSchema, type ExpenseFormValues, type ExpenseItemFormValues } from '@/schemas/expenseSchema';
+import { expenseEntryFormSchema, type ExpenseEntryFormValues, type ExpenseItemFormValues } from '@/schemas/expenseSchema';
 import { assertAttachmentCapacity, pickImages, pickPdf } from '@/services/attachments/pickAttachment';
 import { deleteUnreferencedAsset } from '@/services/cloudinary/flushOrphans';
 import { forgetOrphanAssets } from '@/services/cloudinary/orphanStore';
 import { uploadLocalAttachment } from '@/services/cloudinary/uploadService';
 import { cacheCreatedExpense, cacheUpdatedExpense } from '@/services/expenses/cacheUpdates';
 import { saveExpense } from '@/services/expenses/expenseService';
-import { createEmptyFormValues, createEmptyItem, expenseToFormValues, formToExpense } from '@/services/expenses/mapExpense';
+import { createEmptyEntryValues, createEmptyItem, expenseToEntryValues, formToExpense } from '@/services/expenses/mapExpense';
 import { nowIso, todayIsoDate } from '@/utils/date';
 import { toUserMessage } from '@/utils/errors';
 import { createId } from '@/utils/id';
@@ -37,14 +39,15 @@ import { createSubmitLock } from '@/utils/submitLock';
 
 interface ExpenseFormProps {
   mode: 'create' | 'edit';
+  dosya: Dosya;
   initial?: Expense;
 }
 
-export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
+export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
   const router = useRouter();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { suggestions, remember } = useSuggestions();
   const { options: expenseTypes } = useExpenseTypes();
   const expenseIdRef = useRef(initial?.id ?? createId());
   const createdAtRef = useRef(initial?.createdAt ?? nowIso());
@@ -56,18 +59,13 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const originalAttachments = useRef<AttachmentMeta[]>(initial?.expenseItems.flatMap((item) => item.attachments) ?? []);
 
-  const { control, handleSubmit, setValue, getValues, reset, formState } = useForm<ExpenseFormValues>({
-    resolver: zodResolver(expenseFormSchema),
-    defaultValues: initial ? expenseToFormValues(initial) : { ...createEmptyFormValues(todayIsoDate()), items: [] },
+  const { control, handleSubmit, setValue, getValues, reset, formState } = useForm<ExpenseEntryFormValues>({
+    resolver: zodResolver(expenseEntryFormSchema),
+    defaultValues: initial ? expenseToEntryValues(initial) : { ...createEmptyEntryValues(todayIsoDate()), items: [] },
   });
   const [openCell, setOpenCell] = useState<{ id: string; column: ExpenseCell } | null>(null);
   const items = useWatch({ control, name: 'items' }) ?? [];
   const expenseDate = useWatch({ control, name: 'expenseDate' });
-  const clientName = useWatch({ control, name: 'clientName' });
-  const debtorName = useWatch({ control, name: 'debtorName' });
-  const enforcementOffice = useWatch({ control, name: 'enforcementOffice' });
-  const fileCaseNumber = useWatch({ control, name: 'fileCaseNumber' });
-  const instructionNumber = useWatch({ control, name: 'instructionNumber' });
   const note = useWatch({ control, name: 'note' });
   const total = liveTotalKurus(items.map((item) => item.amount));
   const errors = formState.errors;
@@ -76,7 +74,10 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
     void handleSubmit(onValid)();
   };
 
-  useLayoutEffect(() => {
+  useEffect(() => {
+    if (mode === 'create') {
+      return;
+    }
     navigation.setOptions({
       unstable_headerRightItems: () => [
         {
@@ -94,7 +95,7 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
         </Pressable>
       ),
     });
-  }, [navigation, saving]);
+  }, [mode, navigation, saving]);
 
   function patchItem(itemId: string, patch: (item: ExpenseItemFormValues) => ExpenseItemFormValues) {
     setValue(
@@ -261,7 +262,7 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
       if (!initial) {
         return;
       }
-      router.push({ pathname: '/preview', params: { expenseId: initial.id, attachmentId: attachment.id } });
+      router.push({ pathname: '/preview', params: { dosyaId: dosya.id, expenseId: initial.id, attachmentId: attachment.id } });
       return;
     }
     if (attachment.mimeType === 'application/pdf') {
@@ -305,7 +306,7 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
     }
   }
 
-  async function onValid(values: ExpenseFormValues) {
+  async function onValid(_values: ExpenseEntryFormValues) {
     if (!user || !lock.current.tryLock()) {
       return;
     }
@@ -315,19 +316,20 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
       await ensureUploads();
       const expense = formToExpense({
         id: expenseIdRef.current,
-        ownerId: user.uid,
+        dosya,
+        userId: initial?.userId ?? user.uid,
         values: getValues(),
         createdAt: createdAtRef.current,
       });
-      await saveExpense(expense);
+      await saveExpense(dosya.id, expense);
       await forgetOrphanAssets(
         user.uid,
         expense.expenseItems.flatMap((item) => item.attachments.map((attachment) => attachment.cloudinaryPublicId)),
       );
       if (mode === 'create') {
-        cacheCreatedExpense(queryClient, expense);
+        cacheCreatedExpense(queryClient, user.uid, expense);
       } else {
-        cacheUpdatedExpense(queryClient, expense);
+        cacheUpdatedExpense(queryClient, user.uid, expense);
         const kept = new Set(expense.expenseItems.flatMap((item) => item.attachments.map((attachment) => attachment.id)));
         const removed = originalAttachments.current.filter((attachment) => !kept.has(attachment.id));
         await Promise.all(
@@ -341,14 +343,10 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
           ),
         );
       }
-      await remember({
-        clientNames: values.clientName.trim() ? [values.clientName.trim()] : [],
-        enforcementOffices: values.enforcementOffice.trim() ? [values.enforcementOffice.trim()] : [],
-      });
       if (mode === 'create') {
         expenseIdRef.current = createId();
         createdAtRef.current = nowIso();
-        reset({ ...createEmptyFormValues(todayIsoDate()), items: [] });
+        reset({ ...createEmptyEntryValues(todayIsoDate()), items: [] });
         setOpenCell(null);
         Alert.alert('Masraf kaydedildi', 'Kayıt listeye eklendi.');
       } else {
@@ -382,40 +380,42 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
               return undefined;
             })
             .find((message) => message !== undefined);
-  const summary = formError || errors.clientName?.message || errors.fileCaseNumber?.message || errors.expenseDate?.message || itemsMessage;
+  const summary = formError || errors.expenseDate?.message || itemsMessage;
 
   return (
     <>
-      <ScreenHost fill>
+      <View style={[styles.page, mode === 'create' && { paddingTop: insets.top }]}>
+        {mode === 'create' ? (
+          <View style={styles.topBar}>
+            <AppBackButton onPress={() => router.back()} />
+            <BarText style={styles.topTitle} numberOfLines={1}>
+              Yeni Masraf
+            </BarText>
+            <Pressable accessibilityRole="button" disabled={saving} onPress={() => saveRef.current()} hitSlop={8} style={styles.saveSlot}>
+              <BarText style={[styles.saveLabel, saving && styles.saveBusy]}>Kaydet</BarText>
+            </Pressable>
+          </View>
+        ) : null}
+        {mode === 'edit' ? (
+          <DetailRowsCard
+            heading="Masraf bilgileri"
+            rows={[
+              { label: 'Esas no', value: dosya.fileCaseNumber },
+              { label: 'Müvekkil', value: dosya.clientName },
+              { label: 'İcra dairesi', value: dosya.enforcementOffice },
+              { label: 'Borçlu', value: dosya.debtorName },
+              { label: 'Talimat no', value: dosya.instructionNumber },
+            ]}
+          />
+        ) : null}
+        <ScreenHost fill>
         <FieldGroup>
-          <FieldGroup.Section title="Dosya">
+          <FieldGroup.Section title={mode === 'create' ? 'Borçlu' : undefined}>
+            {mode === 'create' ? (
+              <Text textStyle={{ color: colors.navy, fontSize: typeScale.title, fontWeight: '700' }}>{dosya.debtorName.trim() || dosya.fileCaseNumber}</Text>
+            ) : null}
             <DateField label="Tarih" value={expenseDate} onChange={(value) => setValue('expenseDate', value, { shouldValidate: true })} error={errors.expenseDate?.message} />
-            <AutocompleteField
-              label="Müvekkil"
-              value={clientName}
-              onChangeText={(value) => setValue('clientName', value, { shouldValidate: true })}
-              suggestions={suggestions.clientNames}
-              error={errors.clientName?.message}
-            />
-            <TextField label="Dosya borçlusu" value={debtorName} onChangeText={(value) => setValue('debtorName', value)} placeholder="Kişi veya kurum" />
-            <AutocompleteField
-              label="İcra Dairesi"
-              value={enforcementOffice}
-              onChangeText={(value) => setValue('enforcementOffice', value)}
-              suggestions={suggestions.enforcementOffices}
-              error={errors.enforcementOffice?.message}
-              placeholder="İcra Dairesi"
-            />
-            <TextField
-              label="Esas No"
-              value={fileCaseNumber}
-              onChangeText={(value) => setValue('fileCaseNumber', value, { shouldValidate: true })}
-              error={errors.fileCaseNumber?.message}
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
-            <TextField label="Talimat No" value={instructionNumber} onChangeText={(value) => setValue('instructionNumber', value)} autoCorrect={false} />
-            
+            <TextField label="Not" value={note} onChangeText={(value) => setValue('note', value)} placeholder="İsteğe bağlı" multiline />
           </FieldGroup.Section>
           <FieldGroup.Section>
             <FieldGroup.SectionHeader>
@@ -460,7 +460,8 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
             {summary ? <Text textStyle={{ color: colors.danger, fontSize: typeScale.body }}>{summary}</Text> : null}
           </FieldGroup.Section>
         </FieldGroup>
-      </ScreenHost>
+        </ScreenHost>
+      </View>
       <Modal visible={previewUri !== null} animationType="fade" onRequestClose={() => setPreviewUri(null)}>
         <View style={styles.preview}>
           {previewUri ? <NativePhoto uri={previewUri} /> : null}
@@ -474,6 +475,21 @@ export function ExpenseForm({ mode, initial }: ExpenseFormProps) {
 }
 
 const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: colors.background },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.sm,
+    minHeight: 44,
+  },
+  topTitle: {
+    flex: 1,
+    textAlign: 'center',
+    color: colors.ink,
+    fontSize: typeScale.section,
+    fontWeight: '600',
+  },
+  saveSlot: { minWidth: 72, alignItems: 'flex-end', paddingRight: space.sm },
   preview: { flex: 1, backgroundColor: '#000000', padding: 16, justifyContent: 'flex-end', gap: 16 },
   previewImage: { flex: 1 },
   save: { paddingHorizontal: 4 },

@@ -18,6 +18,11 @@ export default function ProfileScreen() {
         <FieldGroup.Section title="Oturum">
           <Text textStyle={{ color: colors.ink, fontSize: typeScale.title, fontWeight: '700' }}>{user?.displayName || user?.email || 'Oturum'}</Text>
           {user?.displayName ? <Text textStyle={{ color: colors.muted, fontSize: typeScale.body }}>{user.email ?? ''}</Text> : null}
+          {user?.uid ? (
+            <Text selectable textStyle={{ color: colors.muted, fontSize: typeScale.small }}>
+              UID: {user.uid}
+            </Text>
+          ) : null}
         </FieldGroup.Section>
         <FieldGroup.Section title="Bu oturum">
           <Text textStyle={{ color: colors.ink, fontSize: 34, fontWeight: '700' }}>{String(reads)}</Text>

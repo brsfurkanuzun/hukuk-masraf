@@ -4,11 +4,11 @@ import { formatLawyerName, loadUserName } from '@/services/users/userService';
 import { logError } from '@/utils/errors';
 
 export function useLawyerHeading(uid: string | undefined, authName: string | null | undefined): string {
-  const [heading, setHeading] = useState('AV.');
+  const [heading, setHeading] = useState('');
 
   useEffect(() => {
     if (!uid) {
-      setHeading('AV.');
+      setHeading('');
       return;
     }
     let cancelled = false;
@@ -17,8 +17,7 @@ export function useLawyerHeading(uid: string | undefined, authName: string | nul
         if (cancelled) {
           return;
         }
-        const fromProfile = formatLawyerName(name);
-        setHeading(fromProfile !== 'AV.' ? fromProfile : formatLawyerName(nameFromAuth(authName)));
+        setHeading(formatLawyerName(name) || formatLawyerName(nameFromAuth(authName)));
       })
       .catch((error: unknown) => logError('user-name', error));
     return () => {

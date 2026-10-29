@@ -1,13 +1,13 @@
+import type { Dosya } from '@/models/dosya';
 import type { ExpenseType } from '@/constants/expenseTypes';
 import type { Expense, ExpenseItem } from '@/models/expense';
-import type { ExpenseFormValues } from '@/schemas/expenseSchema';
+import type { ExpenseEntryFormValues, ExpenseFormValues } from '@/schemas/expenseSchema';
 import { nowIso } from '@/utils/date';
 import { createId } from '@/utils/id';
 import { parseTlToKurus, sumKurus, formatAmountInput } from '@/utils/money';
-import { normalizeCaseNumber, normalizeSearchText } from '@/utils/text';
 import { AppError } from '@/utils/errors';
 
-export function createEmptyItem(type: ExpenseType = 'yol'): ExpenseFormValues['items'][number] {
+export function createEmptyItem(type: ExpenseType = 'yol'): ExpenseEntryFormValues['items'][number] {
   return {
     id: createId(),
     type,
@@ -31,14 +31,17 @@ export function createEmptyFormValues(dateIso: string): ExpenseFormValues {
   };
 }
 
-export function expenseToFormValues(expense: Expense): ExpenseFormValues {
+export function createEmptyEntryValues(dateIso: string): ExpenseEntryFormValues {
+  return {
+    expenseDate: dateIso,
+    note: '',
+    items: [createEmptyItem()],
+  };
+}
+
+export function expenseToEntryValues(expense: Expense): ExpenseEntryFormValues {
   return {
     expenseDate: expense.expenseDate,
-    clientName: expense.clientName,
-    debtorName: expense.debtorName,
-    enforcementOffice: expense.enforcementOffice,
-    fileCaseNumber: expense.fileCaseNumber,
-    instructionNumber: expense.instructionNumber,
     note: expense.note ?? '',
     items: expense.expenseItems.map((item) => ({
       id: item.id,
@@ -60,10 +63,24 @@ export function expenseToFormValues(expense: Expense): ExpenseFormValues {
   };
 }
 
+export function expenseToFormValues(expense: Expense): ExpenseFormValues {
+  return {
+    expenseDate: expense.expenseDate,
+    clientName: expense.clientName,
+    debtorName: expense.debtorName,
+    enforcementOffice: expense.enforcementOffice,
+    fileCaseNumber: expense.fileCaseNumber,
+    instructionNumber: expense.instructionNumber,
+    note: expense.note ?? '',
+    items: expenseToEntryValues(expense).items,
+  };
+}
+
 export function formToExpense(input: {
   id: string;
-  ownerId: string;
-  values: ExpenseFormValues;
+  dosya: Dosya;
+  userId: string;
+  values: ExpenseEntryFormValues;
   createdAt: string;
   updatedAt?: string;
 }): Expense {
@@ -88,22 +105,21 @@ export function formToExpense(input: {
     };
   });
   const totalAmountKurus = sumKurus(items.map((item) => item.amountKurus));
-  const clientName = input.values.clientName.trim();
-  const enforcementOffice = input.values.enforcementOffice.trim();
-  const fileCaseNumber = input.values.fileCaseNumber.trim();
+  const dosya = input.dosya;
   return {
     id: input.id,
-    ownerId: input.ownerId,
-    userId: input.ownerId,
+    dosyaId: dosya.id,
+    ownerId: dosya.ownerId,
+    userId: input.userId,
     expenseDate: input.values.expenseDate,
-    clientName,
-    clientNameNormalized: normalizeSearchText(clientName),
-    debtorName: input.values.debtorName.trim(),
-    enforcementOffice,
-    enforcementOfficeNormalized: normalizeSearchText(enforcementOffice),
-    fileCaseNumber,
-    fileCaseNumberNormalized: normalizeCaseNumber(fileCaseNumber),
-    instructionNumber: input.values.instructionNumber.trim(),
+    clientName: dosya.clientName,
+    clientNameNormalized: dosya.clientNameNormalized,
+    debtorName: dosya.debtorName,
+    enforcementOffice: dosya.enforcementOffice,
+    enforcementOfficeNormalized: dosya.enforcementOfficeNormalized,
+    fileCaseNumber: dosya.fileCaseNumber,
+    fileCaseNumberNormalized: dosya.fileCaseNumberNormalized,
+    instructionNumber: dosya.instructionNumber,
     note: input.values.note.trim(),
     expenseItems: items,
     totalAmountKurus,

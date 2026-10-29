@@ -9,7 +9,7 @@ import { listExpenses } from '@/services/expenses/expenseService';
 import { buildQueryPlan, type ExpenseCursor, type ExpenseFilters } from '@/services/expenses/queryPlan';
 import { isDateRangeValid } from '@/utils/date';
 
-export function useExpenses(filters: ExpenseFilters) {
+export function useExpenses(dosyaId: string, filters: ExpenseFilters) {
   const { user } = useAuth();
   const uid = user?.uid ?? '';
   const debouncedSearch = useDebouncedValue(filters.searchText, SEARCH_DEBOUNCE_MS);
@@ -25,24 +25,24 @@ export function useExpenses(filters: ExpenseFilters) {
   );
   const dateRangeValid = isDateRangeValid(filters.dateFrom, filters.dateTo);
   const query = useInfiniteQuery({
-    queryKey: ['expenses', uid, 'list', plan],
-    enabled: Boolean(user) && dateRangeValid,
+    queryKey: ['expenses', uid, dosyaId, 'list', plan],
+    enabled: Boolean(user && dosyaId) && dateRangeValid,
     initialPageParam: null as ExpenseCursor | null,
     staleTime: 5 * 60 * 1000,
-    queryFn: ({ pageParam }) => listExpenses(uid, plan, pageParam),
+    queryFn: ({ pageParam }) => listExpenses(uid, dosyaId, plan, pageParam),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
   const items = useMemo(() => dedupeExpenses(query.data?.pages.flatMap((page) => page.items) ?? []), [query.data]);
   return { ...query, items, plan, debouncedSearch, dateRangeValid };
 }
 
-export function useRefreshExpenses(plan: ReturnType<typeof buildQueryPlan>) {
+export function useRefreshExpenses(dosyaId: string, plan: ReturnType<typeof buildQueryPlan>) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return async () => {
     if (!user) {
       return;
     }
-    await queryClient.resetQueries({ queryKey: ['expenses', user.uid, 'list', plan], exact: true });
+    await queryClient.resetQueries({ queryKey: ['expenses', user.uid, dosyaId, 'list', plan], exact: true });
   };
 }

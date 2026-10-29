@@ -45,6 +45,14 @@ Kullanıcıyı Firebase Console → Authentication bölümünde e-posta ve şifr
 
 Kurallar tek belge okumasına izin verir; listeleme kapalıdır. Her giriş 1 belge okur. Alan `@` içerirse değer doğrudan e-posta kabul edilir.
 
+### Dosya ataması
+
+Avukatlar serbest masraf açmaz. Önce kendilerine atanmış icra dosyası (`dosyalar`) seçilir; masraflar `dosyalar/{dosyaId}/expenses/{expenseId}` altında tutulur.
+
+Dosya belgesi (Console veya yönetim aracı) örnek alanlar: `ownerId`, `assignedUserIds`, müvekkil / esas no / icra alanları (normalize edilmiş alanlar dahil), `createdAt`, `updatedAt` (24 karakter ISO).
+
+Mobil uygulama yalnızca `assignedUserIds` içinde UID’si olan dosyaları listeler. Üst seviye `expenses` koleksiyonuna yeni kayıt yazılamaz.
+
 Masraf türleri Yol, Gıda ve Konaklama’dır. Masraf kaydında isteğe bağlı `note` alanı vardır; boş bırakılabilir ve en fazla 500 karakterdir.
 
 Çıkışta TanStack Query önbelleği temizlenir, oturum okuma sayacı sıfırlanır ve henüz bir masrafa bağlanmamış Cloudinary dosyaları silinmeye çalışılır.

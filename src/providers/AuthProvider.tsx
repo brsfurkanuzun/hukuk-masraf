@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { signInWithIdentifier, signOutAndClear } from '@/services/auth/authService';
 import { flushOrphanAssets } from '@/services/cloudinary/flushOrphans';
 import { getFirebase, isFirebaseConfigured } from '@/services/firebase/config';
+import { registerPushToken } from '@/services/notifications/pushRegistration';
 import { ensureUserProfile } from '@/services/users/userService';
 import { logError, toUserMessage } from '@/utils/errors';
 
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       void ensureUserProfile(nextUser.uid, nextUser.email).catch((error: unknown) => logError('profile', error));
+      void registerPushToken(nextUser.uid).catch((error: unknown) => logError('push-register', error));
       void flushOrphanAssets(nextUser.uid).catch((error: unknown) => logError('orphan-flush', error));
     });
   }, [configured]);

@@ -11,6 +11,7 @@ interface DateFieldProps {
   onChange: (isoDate: string) => void;
   error?: string;
   divider?: boolean;
+  framed?: boolean;
 }
 
 export function DateField({ label, value, onChange, error, divider = false }: DateFieldProps) {
