@@ -58,7 +58,7 @@ export function toUserMessage(error: unknown): string {
   if (code.endsWith('unauthenticated')) {
     return 'Oturum doğrulanamadı. Tekrar giriş yapın.';
   }
-  return 'İşlem tamamlanamadı. Girdiğiniz bilgiler formda duruyor.';
+  return code ? `İşlem tamamlanamadı (${code}). Girdiğiniz bilgiler formda duruyor.` : 'İşlem tamamlanamadı. Girdiğiniz bilgiler formda duruyor.';
 }
 
 export function logError(scope: string, error: unknown): void {

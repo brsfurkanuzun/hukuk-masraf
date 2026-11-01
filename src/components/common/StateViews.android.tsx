@@ -1,13 +1,15 @@
 import { Column, Text } from '@expo/ui';
-import { fillMaxWidth } from '@expo/ui/jetpack-compose/modifiers';
+import { LoadingIndicator } from '@expo/ui/jetpack-compose';
+import { fillMaxWidth, padding, size } from '@expo/ui/jetpack-compose/modifiers';
 
 import { Button } from '@/components/common/Button';
 import { colors, type as typeScale } from '@/constants/theme';
 
 export function LoadingState({ label = 'Yükleniyor' }: { label?: string }) {
   return (
-    <Column spacing={8} modifiers={[fillMaxWidth()]}>
-      <Text textStyle={{ color: colors.ink, fontSize: typeScale.section, fontWeight: '600' }}>{label}</Text>
+    <Column spacing={12} alignment="center" modifiers={[fillMaxWidth(), padding(0, 24, 0, 24)]}>
+      <LoadingIndicator color={colors.navy} modifiers={[size(56, 56)]} />
+      <Text textStyle={{ color: colors.muted, fontSize: typeScale.label, fontWeight: '500' }}>{label}</Text>
     </Column>
   );
 }

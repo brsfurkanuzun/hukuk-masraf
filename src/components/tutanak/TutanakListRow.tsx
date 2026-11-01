@@ -5,17 +5,22 @@ import type { Tutanak } from '@/models/tutanak';
 import { formatTrDate } from '@/utils/date';
 
 export function TutanakListRow({ tutanak, authorName, onPress }: { tutanak: Tutanak; authorName?: string; onPress: () => void }) {
-  const attachmentCount = tutanak.attachments.length;
+  const imageCount = tutanak.attachments.filter((attachment) => attachment.resourceType === 'image').length;
+  const documentCount = tutanak.attachments.length - imageCount;
   const name = authorName?.trim() ?? '';
+  const note = tutanak.content.trim();
+  const date = formatTrDate(tutanak.tutanakDate);
+  // Başlık: not varsa not, yoksa tarih. Alt satır: kalan bilgiler.
+  const title = note || date;
+  const meta = [note ? date : '', name, imageCount > 0 ? `${imageCount} resim` : '', documentCount > 0 ? `${documentCount} doküman` : '']
+    .filter((part) => part.length > 0)
+    .join(' · ');
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
       <Text style={styles.title} numberOfLines={2}>
-        {tutanak.content.trim() || 'Tutanak'}
+        {title}
       </Text>
-      <Text style={styles.meta}>
-        {name ? `${formatTrDate(tutanak.tutanakDate)} · ${name}` : formatTrDate(tutanak.tutanakDate)}
-        {attachmentCount > 0 ? ` · ${attachmentCount} belge` : ''}
-      </Text>
+      {meta ? <Text style={styles.meta}>{meta}</Text> : null}
     </Pressable>
   );
 }

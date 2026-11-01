@@ -21,6 +21,9 @@ export const dosyaDetailStyles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: space.xs,
   },
+  topSpacer: {
+    flex: 1,
+  },
   topAction: {
     width: 44,
     height: 44,
@@ -47,10 +50,33 @@ export const dosyaDetailStyles = StyleSheet.create({
     fontSize: typeScale.section,
     fontWeight: '700',
   },
+  sectionBadge: {
+    backgroundColor: colors.fill,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+  },
   sectionMeta: {
-    color: colors.faint,
+    color: colors.muted,
     fontSize: typeScale.small,
     fontWeight: '600',
+  },
+  emptyCard: {
+    marginHorizontal: space.lg,
+    paddingVertical: space.xl,
+    paddingHorizontal: space.lg,
+    gap: space.xs,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.separator,
+  },
+  emptyHint: {
+    color: colors.faint,
+    fontSize: typeScale.label,
+    textAlign: 'center',
   },
   list: {
     backgroundColor: colors.surface,

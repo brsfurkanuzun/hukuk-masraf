@@ -1,6 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Loader } from '@/components/common/Loader';
 import { TutanakForm } from '@/components/forms/TutanakForm';
 import { colors, space, type as typeScale } from '@/constants/theme';
 import { useDosya } from '@/hooks/useDosyalar';
@@ -14,8 +15,7 @@ export default function NewTutanakScreen() {
   if (query.isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color={colors.navy} />
-        <Text style={styles.hint}>Dosya yükleniyor…</Text>
+        <Loader label="Dosya yükleniyor" />
       </View>
     );
   }

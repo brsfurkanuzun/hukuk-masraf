@@ -21,12 +21,12 @@ export default function AppLayout() {
     >
       <Stack.Screen name="index" options={{ headerShown: false, title: 'Dosyalarım' }} />
       <Stack.Screen name="profile" options={{ title: 'Profil' }} />
-      <Stack.Screen name="notifications" options={{ headerShown: false, title: 'Bildirimler' }} />
-      <Stack.Screen name="dosya/[dosyaId]/index" options={{ headerShown: false, title: 'Dosya' }} />
-      <Stack.Screen name="dosya/[dosyaId]/expense/new" options={{ headerShown: false, title: 'Yeni Masraf' }} />
+      <Stack.Screen name="notifications" options={{ title: 'Bildirimler' }} />
+      <Stack.Screen name="dosya/[dosyaId]/index" options={{ title: '' }} />
+      <Stack.Screen name="dosya/[dosyaId]/expense/new" options={{ title: 'Yeni Masraf' }} />
       <Stack.Screen name="dosya/[dosyaId]/expense/[id]/index" options={{ title: 'Masraf Detayı' }} />
       <Stack.Screen name="dosya/[dosyaId]/expense/[id]/edit" options={{ title: 'Masrafı Düzenle' }} />
-      <Stack.Screen name="dosya/[dosyaId]/tutanak/new" options={{ headerShown: false, title: 'Tutanak gir' }} />
+      <Stack.Screen name="dosya/[dosyaId]/tutanak/new" options={{ title: 'Yeni Tutanak' }} />
       <Stack.Screen name="expense/new" options={{ title: 'Yeni Masraf' }} />
       <Stack.Screen name="expense/[id]/index" options={{ title: 'Masraf Detayı' }} />
       <Stack.Screen name="expense/[id]/edit" options={{ title: 'Masrafı Düzenle' }} />

@@ -168,6 +168,7 @@ service cloud.firestore {
       return data.keys().hasOnly([
           'ownerId',
           'assignedUserIds',
+          'clientId',
           'clientName',
           'clientNameNormalized',
           'debtorName',
@@ -182,6 +183,7 @@ service cloud.firestore {
         && data.ownerId == request.auth.uid
         && data.assignedUserIds is list
         && data.assignedUserIds.size() <= 50
+        && (!data.keys().hasAny(['clientId']) || stringBetween(data.clientId, 1, 80))
         && stringBetween(data.clientName, 2, 200)
         && stringBetween(data.clientNameNormalized, 2, 200)
         && data.debtorName is string
@@ -216,7 +218,8 @@ service cloud.firestore {
     }
 
     function softDeleteOnly() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedAt', 'updatedAt'])
+      return resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedAt', 'updatedAt'])
         && request.resource.data.deletedAt is string
         && request.resource.data.deletedAt.size() == 24
         && request.resource.data.updatedAt == request.resource.data.deletedAt
@@ -238,6 +241,7 @@ service cloud.firestore {
         && data.tutanakDate.size() == 10
         && stringBetween(data.content, 0, 8000)
         && attachmentsOk(data.attachments)
+        && data.attachments.size() >= 1
         && data.createdAt is string
         && data.createdAt.size() == 24
         && data.updatedAt is string
@@ -250,23 +254,69 @@ service cloud.firestore {
         && data.ownerId == d.ownerId;
     }
 
+    function userRoleIdOk(roleId) {
+      return roleId == 'admin' || roleId == 'icra_avukati' || roleId == 'avukat';
+    }
+
+    function authRoleCode() {
+      return request.auth.token.roleCode != null
+        ? request.auth.token.roleCode
+        : request.auth.token.role;
+    }
+
+    function isAdmin() {
+      return signedIn() && authRoleCode() == 'admin';
+    }
+
+    function clientOk(data) {
+      return data.keys().hasOnly(['id', 'clientName', 'clientNameNormalized', 'createdAt', 'updatedAt'])
+        && data.id == clientId
+        && stringBetween(data.clientName, 2, 200)
+        && stringBetween(data.clientNameNormalized, 2, 200)
+        && data.createdAt is string
+        && data.createdAt.size() == 24
+        && data.updatedAt is string
+        && data.updatedAt.size() == 24;
+    }
+
+    match /clients/{clientId} {
+      allow get, list: if signedIn();
+      allow create: if isAdmin() && clientOk(request.resource.data);
+      allow update: if isAdmin()
+        && clientOk(request.resource.data)
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /roles/{roleId} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if false;
+    }
+
     match /users/{userId} {
       allow get: if signedIn();
       allow list: if false;
       allow create: if isOwner(userId)
-        && request.resource.data.keys().hasOnly(['email', 'displayName', 'firstName', 'lastName', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'firstName', 'lastName', 'createdAt', 'roleId'])
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() <= 200
+        && request.resource.data.roleId == 'avukat'
+        && userRoleIdOk(request.resource.data.roleId)
+        && exists(/databases/$(database)/documents/roles/$(request.resource.data.roleId))
         && (!request.resource.data.keys().hasAny(['firstName']) || stringBetween(request.resource.data.firstName, 1, 80))
         && (!request.resource.data.keys().hasAny(['lastName']) || stringBetween(request.resource.data.lastName, 1, 80))
         && request.resource.data.createdAt is string;
       allow update: if isOwner(userId)
         && request.resource.data.email == resource.data.email
         && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.keys().hasOnly(['email', 'displayName', 'firstName', 'lastName', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'firstName', 'lastName', 'createdAt', 'roleId'])
         && (!request.resource.data.keys().hasAny(['firstName']) || stringBetween(request.resource.data.firstName, 1, 80))
-        && (!request.resource.data.keys().hasAny(['lastName']) || stringBetween(request.resource.data.lastName, 1, 80));
+        && (!request.resource.data.keys().hasAny(['lastName']) || stringBetween(request.resource.data.lastName, 1, 80))
+        && (!request.resource.data.keys().hasAny(['roleId'])
+          || !resource.data.keys().hasAny(['roleId'])
+          || request.resource.data.roleId == resource.data.roleId);
       allow delete: if false;
 
       match /meta/{docId} {
@@ -285,6 +335,13 @@ service cloud.firestore {
             && request.resource.data.keys().hasOnly(['lastReadAt'])
             && request.resource.data.lastReadAt is string
             && request.resource.data.lastReadAt.size() == 24
+          ) || (
+            docId == 'noticeRead'
+            && request.resource.data.keys().hasOnly(['readIds', 'updatedAt'])
+            && request.resource.data.readIds is list
+            && request.resource.data.readIds.size() <= 500
+            && request.resource.data.updatedAt is string
+            && request.resource.data.updatedAt.size() == 24
           )
         );
         allow delete: if false;
@@ -372,7 +429,7 @@ service cloud.firestore {
           && resource.data.userId == request.resource.data.userId
           && request.resource.data.createdAt == resource.data.createdAt
           && tutanakInDosyaOk(dosyaId, request.resource.data);
-        allow delete: if canAccessDosya(dosyaId);
+        allow delete: if canAccessDosya(dosyaId) && resource.data.userId == request.auth.uid;
       }
     }
 

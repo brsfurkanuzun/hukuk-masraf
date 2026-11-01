@@ -1,23 +1,31 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
-import { DosyaDetailsCard } from '@/components/dosya/DosyaDetailsCard';
+import { Loader } from '@/components/common/Loader';
+import { closeOpenSwipeRow, SwipeDeleteRow } from '@/components/common/SwipeDeleteRow';
+import { DosyaDetailsCard, type DosyaStat } from '@/components/dosya/DosyaDetailsCard';
 import { dosyaDetailStyles as styles } from '@/components/dosya/dosyaDetailStyles';
-import { DosyaDetailTopBar } from '@/components/dosya/DosyaDetailTopBar';
+import { DosyaAddMenuButton } from '@/components/dosya/DosyaAddMenuButton';
 import { ExpenseListRow } from '@/components/expenses/ExpenseListRow';
-import { TutanakImageViewer } from '@/components/tutanak/TutanakImageViewer';
+import { TutanakAttachmentsViewer } from '@/components/tutanak/TutanakAttachmentsViewer';
 import { TutanakListRow } from '@/components/tutanak/TutanakListRow';
 import { colors, space } from '@/constants/theme';
 import { useAuthorNames } from '@/hooks/useAuthorNames';
 import { useDosyaDetailModel } from '@/hooks/useDosyaDetailModel';
 import type { AttachmentMeta } from '@/models/expense';
+import { useAuth } from '@/providers/AuthProvider';
+import { queryClient } from '@/providers/queryClient';
+import { cacheDeletedExpense } from '@/services/expenses/cacheUpdates';
+import { deleteExpense } from '@/services/expenses/expenseService';
+import { displayTotalKurus } from '@/services/expenses/mapExpense';
+import { deleteTutanak } from '@/services/tutanak/tutanakService';
 import { toUserMessage } from '@/utils/errors';
+import { formatKurus, sumKurus } from '@/utils/money';
 
 /** Dosya detay — yalnızca RN (Expo Go çökmesini önler). */
 export default function DosyaDetailScreen() {
-  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const { dosyaId: rawDosyaId } = useLocalSearchParams<{ dosyaId: string }>();
   const dosyaId = typeof rawDosyaId === 'string' ? rawDosyaId : '';
   const model = useDosyaDetailModel(dosyaId);
@@ -25,7 +33,83 @@ export default function DosyaDetailScreen() {
   const refetchExpenses = model.query.refetch;
   const refetchTutanaklar = model.tutanakQuery.refetch;
   const [openImages, setOpenImages] = useState<AttachmentMeta[] | null>(null);
+  const { user } = useAuth();
+
+  // "+" menüsü, diğer ekranlardaki gibi yığın başlığında durur.
+  const menuItems = useRef(model.addMenuItems);
+  menuItems.current = model.addMenuItems;
+  useEffect(() => {
+    navigation.setOptions({
+      // iOS: sistemin kendi başlık düğmesi (menülü). Özel görünümü sarmaladığı için çift çerçeve oluşmaz.
+      unstable_headerRightItems: () => [
+        {
+          type: 'menu',
+          label: 'Ekle',
+          icon: { type: 'sfSymbol', name: 'plus' },
+          tintColor: colors.navy,
+          menu: {
+            items: menuItems.current.map((item) => ({ type: 'action' as const, label: item.label, onPress: item.onPress })),
+          },
+        },
+      ],
+      // Android: kendi menü düğmemiz.
+      headerRight: () => <DosyaAddMenuButton items={menuItems.current} />,
+    });
+  }, [navigation]);
+
+  function confirmDeleteExpense(expenseId: string) {
+    Alert.alert('Masraf silinsin mi?', undefined, [
+      { text: 'Vazgeç', style: 'cancel' },
+      {
+        text: 'Sil',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              await deleteExpense(dosyaId, expenseId);
+              if (user) {
+                cacheDeletedExpense(queryClient, user.uid, dosyaId, expenseId);
+              }
+              void refetchExpenses();
+            } catch (error) {
+              Alert.alert('Silinemedi', toUserMessage(error));
+            }
+          })();
+        },
+      },
+    ]);
+  }
+
+  function confirmDeleteTutanak(tutanakId: string) {
+    Alert.alert('Tutanak silinsin mi?', undefined, [
+      { text: 'Vazgeç', style: 'cancel' },
+      {
+        text: 'Sil',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              await deleteTutanak(dosyaId, tutanakId);
+              void refetchTutanaklar();
+            } catch (error) {
+              Alert.alert('Silinemedi', toUserMessage(error));
+            }
+          })();
+        },
+      },
+    ]);
+  }
+
   const authorNames = useAuthorNames([...model.items.map((item) => item.userId), ...model.tutanaklar.map((item) => item.userId)]);
+
+  // Toplam tutar yalnızca tüm masraflar yüklendiyse doğru olur.
+  const stats: DosyaStat[] = [
+    { label: 'Masraf', value: `${model.items.length}${model.query.hasNextPage ? '+' : ''}`, weight: 0.8 },
+    ...(model.listReady && !model.query.hasNextPage
+      ? [{ label: 'Toplam masraf', value: formatKurus(sumKurus(model.items.map((item) => displayTotalKurus(item)))), weight: 2 }]
+      : []),
+    { label: 'Tutanak', value: String(model.tutanaklar.length), weight: 0.9 },
+  ];
 
   useFocusEffect(
     useCallback(() => {
@@ -36,16 +120,15 @@ export default function DosyaDetailScreen() {
 
   if (model.dosyaQuery.isLoading) {
     return (
-      <View style={[styles.centered, { paddingTop: insets.top }]}>
-        <ActivityIndicator color={colors.navy} />
-        <Text style={styles.hint}>Dosya yükleniyor…</Text>
+      <View style={styles.centered}>
+        <Loader label="Dosya yükleniyor" />
       </View>
     );
   }
 
   if (model.dosyaQuery.isError || !model.dosya) {
     return (
-      <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: space.lg }]}>
+      <View style={[styles.centered, { paddingHorizontal: space.lg }]}>
         <Text style={styles.error}>{model.errorMessage}</Text>
         <Pressable accessibilityRole="button" onPress={() => void model.dosyaQuery.refetch()} style={styles.retry}>
           <Text style={styles.retryLabel}>Tekrar dene</Text>
@@ -55,22 +138,31 @@ export default function DosyaDetailScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <DosyaDetailTopBar title={model.topTitle} addMenuItems={model.addMenuItems} onBack={() => model.router.back()} />
+    <View
+      style={styles.screen}
+      // Açık satırın dışına dokunulunca kapat. Gecikme, "Sil" düğmesine basışın tamamlanmasına izin verir.
+      onTouchStartCapture={() => {
+        setTimeout(closeOpenSwipeRow, 250);
+      }}
+    >
       <ScrollView
         style={styles.scroll}
+        onScrollBeginDrag={closeOpenSwipeRow}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={model.refreshing} onRefresh={() => void model.onRefresh()} />}
       >
-        <DosyaDetailsCard dosya={model.dosya} />
+        <DosyaDetailsCard dosya={model.dosya} stats={stats} />
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Masraf</Text>
-          {model.items.length > 0 ? <Text style={styles.sectionMeta}>{`${model.items.length} kayıt`}</Text> : null}
+          {model.items.length > 0 ? (
+            <View style={styles.sectionBadge}>
+              <Text style={styles.sectionMeta}>{`${model.items.length}${model.query.hasNextPage ? '+' : ''} kayıt`}</Text>
+            </View>
+          ) : null}
         </View>
         {model.query.isLoading ? (
           <View style={styles.inlineState}>
-            <ActivityIndicator color={colors.navy} />
-            <Text style={styles.hint}>Masraflar yükleniyor…</Text>
+            <Loader label="Masraflar yükleniyor" />
           </View>
         ) : null}
         {model.query.isError ? (
@@ -82,14 +174,17 @@ export default function DosyaDetailScreen() {
           </View>
         ) : null}
         {model.listReady && model.items.length === 0 ? (
-          <View style={styles.inlineState}>
+          <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Henüz masraf yok</Text>
+            <Text style={styles.emptyHint}>Sağ üstteki + ile masraf ekleyebilirsiniz.</Text>
           </View>
         ) : null}
         {model.listReady ? (
           <View style={styles.list}>
             {model.items.map((item) => (
-              <ExpenseListRow key={item.id} expense={item} authorName={authorNames[item.userId]} onPress={() => model.openExpense(item.id)} />
+              <SwipeDeleteRow key={item.id} enabled={item.userId === user?.uid} onDelete={() => confirmDeleteExpense(item.id)}>
+                <ExpenseListRow expense={item} authorName={authorNames[item.userId]} onPress={() => model.openExpense(item.id)} />
+              </SwipeDeleteRow>
             ))}
           </View>
         ) : null}
@@ -105,12 +200,15 @@ export default function DosyaDetailScreen() {
         ) : null}
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Tutanak</Text>
-          {model.tutanaklar.length > 0 ? <Text style={styles.sectionMeta}>{`${model.tutanaklar.length} kayıt`}</Text> : null}
+          {model.tutanaklar.length > 0 ? (
+            <View style={styles.sectionBadge}>
+              <Text style={styles.sectionMeta}>{`${model.tutanaklar.length} kayıt`}</Text>
+            </View>
+          ) : null}
         </View>
         {model.tutanakQuery.isLoading ? (
           <View style={styles.inlineState}>
-            <ActivityIndicator color={colors.navy} />
-            <Text style={styles.hint}>Tutanaklar yükleniyor…</Text>
+            <Loader label="Tutanaklar yükleniyor" />
           </View>
         ) : null}
         {model.tutanakQuery.isError ? (
@@ -122,31 +220,33 @@ export default function DosyaDetailScreen() {
           </View>
         ) : null}
         {tutanakReady && model.tutanaklar.length === 0 ? (
-          <View style={styles.inlineState}>
+          <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Henüz tutanak yok</Text>
+            <Text style={styles.emptyHint}>Sağ üstteki + ile tutanak ekleyebilirsiniz.</Text>
           </View>
         ) : null}
         {tutanakReady && model.tutanaklar.length > 0 ? (
           <View style={styles.list}>
             {model.tutanaklar.map((item) => (
-              <TutanakListRow
-                key={item.id}
-                tutanak={item}
-                authorName={authorNames[item.userId]}
-                onPress={() => {
-                  const images = item.attachments.filter((attachment) => attachment.resourceType === 'image' && attachment.url);
-                  if (images.length === 0) {
-                    Alert.alert('Görsel yok', 'Bu tutanakta açılacak bir görsel yok.');
-                    return;
-                  }
-                  setOpenImages(images);
-                }}
-              />
+              <SwipeDeleteRow key={item.id} enabled={item.userId === user?.uid} onDelete={() => confirmDeleteTutanak(item.id)}>
+                <TutanakListRow
+                  tutanak={item}
+                  authorName={authorNames[item.userId]}
+                  onPress={() => {
+                    const files = item.attachments.filter((attachment) => attachment.url);
+                    if (files.length === 0) {
+                      Alert.alert('Ek yok', 'Bu tutanakta açılacak bir ek yok.');
+                      return;
+                    }
+                    setOpenImages(files);
+                  }}
+                />
+              </SwipeDeleteRow>
             ))}
           </View>
         ) : null}
       </ScrollView>
-      {openImages ? <TutanakImageViewer images={openImages} onClose={() => setOpenImages(null)} /> : null}
+      {openImages ? <TutanakAttachmentsViewer attachments={openImages} onClose={() => setOpenImages(null)} /> : null}
     </View>
   );
 }

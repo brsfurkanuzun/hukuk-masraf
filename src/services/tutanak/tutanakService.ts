@@ -1,4 +1,4 @@
-import { collection, doc, getDocFromServer, getDocsFromServer, limit, orderBy, query, setDoc, writeBatch, type DocumentData } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocFromServer, getDocsFromServer, limit, orderBy, query, setDoc, writeBatch, type DocumentData } from 'firebase/firestore';
 
 import type { AttachmentMeta } from '@/models/expense';
 import type { Tutanak } from '@/models/tutanak';
@@ -27,6 +27,10 @@ export async function getTutanak(dosyaId: string, tutanakId: string): Promise<Tu
 
 export async function saveTutanak(dosyaId: string, tutanak: Tutanak): Promise<void> {
   await setDoc(doc(getFirebase().db, 'dosyalar', dosyaId, 'tutanaklar', tutanak.id), tutanakPayload(tutanak));
+}
+
+export async function deleteTutanak(dosyaId: string, tutanakId: string): Promise<void> {
+  await deleteDoc(doc(getFirebase().db, 'dosyalar', dosyaId, 'tutanaklar', tutanakId));
 }
 
 export async function saveTutanaklar(dosyaId: string, records: Tutanak[]): Promise<void> {

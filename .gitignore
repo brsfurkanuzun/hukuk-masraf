@@ -36,6 +36,9 @@ yarn-error.*
 functions/.env
 functions/.secret.local
 
+# Firebase Admin SDK (web + scripts)
+secrets/*.json
+
 # typescript
 *.tsbuildinfo
 

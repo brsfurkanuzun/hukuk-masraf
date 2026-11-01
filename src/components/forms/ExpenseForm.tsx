@@ -1,5 +1,6 @@
-import { FieldGroup, Host, Text } from '@expo/ui';
+import { Column, FieldGroup, RNHostView, Row, Spacer, Text } from '@expo/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Image } from 'expo-image';
 import { File } from 'expo-file-system';
 import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -7,18 +8,19 @@ import { useForm, useWatch } from 'react-hook-form';
 import { Alert, Text as BarText, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppBackButton } from '@/components/common/AppBackButton';
 import { Button } from '@/components/common/Button';
-import { DetailRowsCard } from '@/components/common/DetailRowsCard';
 import { TextField } from '@/components/common/TextField';
+import { flushRow } from '@/components/forms/flushRow';
 import type { Dosya } from '@/models/dosya';
 import { DateField } from '@/components/forms/DateField';
+import { ExpenseSummaryCard } from '@/components/expenses/ExpenseSummaryCard';
 import { ExpenseAddHeader } from '@/components/forms/ExpenseAddHeader';
-import { ExpenseLineHeader, ExpenseLineRow, ExpenseLineTotal, type ExpenseCell } from '@/components/forms/ItemLinesTable';
-import { NativePhoto } from '@/components/native/NativePhoto';
+import { AttachmentList } from '@/components/forms/ExpenseItemFields';
+import { ExpenseTypeField } from '@/components/forms/ExpenseTypeField';
 import { ScreenHost } from '@/components/native/ScreenHost';
+import { withCurrentExpenseType } from '@/constants/expenseTypes';
 import { MAX_EXPENSE_ITEMS } from '@/constants/limits';
-import { colors, space, type as typeScale } from '@/constants/theme';
+import { colors, radius, space, type as typeScale } from '@/constants/theme';
 import { useExpenseTypes } from '@/hooks/useExpenseTypes';
 import type { AttachmentMeta, Expense, LocalAttachment } from '@/models/expense';
 import { useAuth } from '@/providers/AuthProvider';
@@ -31,10 +33,10 @@ import { uploadLocalAttachment } from '@/services/cloudinary/uploadService';
 import { cacheCreatedExpense, cacheUpdatedExpense } from '@/services/expenses/cacheUpdates';
 import { saveExpense } from '@/services/expenses/expenseService';
 import { createEmptyEntryValues, createEmptyItem, expenseToEntryValues, formToExpense } from '@/services/expenses/mapExpense';
-import { nowIso, todayIsoDate } from '@/utils/date';
+import { formatTrDate, nowIso, todayIsoDate } from '@/utils/date';
 import { toUserMessage } from '@/utils/errors';
 import { createId } from '@/utils/id';
-import { formatKurus, liveTotalKurus } from '@/utils/money';
+import { formatAmountInput, formatKurus, liveTotalKurus, parseTlToKurus } from '@/utils/money';
 import { createSubmitLock } from '@/utils/submitLock';
 
 interface ExpenseFormProps {
@@ -63,7 +65,6 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
     resolver: zodResolver(expenseEntryFormSchema),
     defaultValues: initial ? expenseToEntryValues(initial) : { ...createEmptyEntryValues(todayIsoDate()), items: [] },
   });
-  const [openCell, setOpenCell] = useState<{ id: string; column: ExpenseCell } | null>(null);
   const items = useWatch({ control, name: 'items' }) ?? [];
   const expenseDate = useWatch({ control, name: 'expenseDate' });
   const note = useWatch({ control, name: 'note' });
@@ -75,9 +76,6 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
   };
 
   useEffect(() => {
-    if (mode === 'create') {
-      return;
-    }
     navigation.setOptions({
       unstable_headerRightItems: () => [
         {
@@ -231,10 +229,8 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
       const owner = getValues('items').find((item) => item.id === itemId);
       const currentCount = owner?.attachments.length ?? 0;
       assertAttachmentCapacity(currentCount, incoming.length);
+      // Yükleme Kaydet'e basılınca yapılır (ensureUploads); burada yalnızca listeye eklenir.
       patchItem(itemId, (item) => ({ ...item, attachments: [...item.attachments, ...incoming] }));
-      for (const attachment of incoming) {
-        void uploadAttachment(itemId, attachment.id);
-      }
     } catch (error) {
       Alert.alert('Belge eklenemedi', toUserMessage(error));
     }
@@ -273,14 +269,6 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
     setPreviewUri(attachment.localUri);
   }
 
-  function pressCell(item: ExpenseItemFormValues, column: ExpenseCell) {
-    if (openCell?.id === item.id && openCell.column === column) {
-      setOpenCell(null);
-      return;
-    }
-    setOpenCell({ id: item.id, column });
-  }
-
   function addLine() {
     const current = getValues('items');
     if (current.length >= MAX_EXPENSE_ITEMS) {
@@ -289,7 +277,6 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
     }
     const next = createEmptyItem(expenseTypes[0]?.value ?? 'yol');
     setValue('items', [...current, next], { shouldDirty: true });
-    setOpenCell({ id: next.id, column: 'amount' });
   }
 
   function deleteLine(item: ExpenseItemFormValues) {
@@ -301,9 +288,6 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
       getValues('items').filter((candidate) => candidate.id !== item.id),
       { shouldDirty: true },
     );
-    if (openCell?.id === item.id) {
-      setOpenCell(null);
-    }
   }
 
   async function onValid(_values: ExpenseEntryFormValues) {
@@ -347,7 +331,6 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
         expenseIdRef.current = createId();
         createdAtRef.current = nowIso();
         reset({ ...createEmptyEntryValues(todayIsoDate()), items: [] });
-        setOpenCell(null);
         Alert.alert('Masraf kaydedildi', 'Kayıt listeye eklendi.');
       } else {
         savedRef.current = true;
@@ -384,36 +367,30 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
 
   return (
     <>
-      <View style={[styles.page, mode === 'create' && { paddingTop: insets.top }]}>
-        {mode === 'create' ? (
-          <View style={styles.topBar}>
-            <AppBackButton onPress={() => router.back()} />
-            <BarText style={styles.topTitle} numberOfLines={1}>
-              Yeni Masraf
-            </BarText>
-            <Pressable accessibilityRole="button" disabled={saving} onPress={() => saveRef.current()} hitSlop={8} style={styles.saveSlot}>
-              <BarText style={[styles.saveLabel, saving && styles.saveBusy]}>Kaydet</BarText>
-            </Pressable>
-          </View>
-        ) : null}
-        {mode === 'edit' ? (
-          <DetailRowsCard
-            heading="Masraf bilgileri"
-            rows={[
-              { label: 'Esas no', value: dosya.fileCaseNumber },
-              { label: 'Müvekkil', value: dosya.clientName },
-              { label: 'İcra dairesi', value: dosya.enforcementOffice },
-              { label: 'Borçlu', value: dosya.debtorName },
-              { label: 'Talimat no', value: dosya.instructionNumber },
-            ]}
-          />
-        ) : null}
+      <View style={styles.page}>
         <ScreenHost fill>
         <FieldGroup>
-          <FieldGroup.Section title={mode === 'create' ? 'Borçlu' : undefined}>
-            {mode === 'create' ? (
-              <Text textStyle={{ color: colors.navy, fontSize: typeScale.title, fontWeight: '700' }}>{dosya.debtorName.trim() || dosya.fileCaseNumber}</Text>
-            ) : null}
+          <FieldGroup.Section>
+            {/* RN kart, kaydırılan yerel listenin içinde: form kayarken birlikte kayar. Genişlik üst öğeden, yükseklik karttan gelir. */}
+            <Column modifiers={flushRow}>
+              <RNHostView matchContents={{ vertical: true }}>
+                <ExpenseSummaryCard
+                  summary={{
+                    debtorName: dosya.debtorName,
+                    fileCaseNumber: dosya.fileCaseNumber,
+                    clientName: dosya.clientName,
+                    date: formatTrDate(expenseDate),
+                    total: formatKurus(total),
+                    itemCount: items.length,
+                    enforcementOffice: dosya.enforcementOffice,
+                    instructionNumber: dosya.instructionNumber,
+                    note: '',
+                  }}
+                />
+              </RNHostView>
+            </Column>
+          </FieldGroup.Section>
+          <FieldGroup.Section>
             <DateField label="Tarih" value={expenseDate} onChange={(value) => setValue('expenseDate', value, { shouldValidate: true })} error={errors.expenseDate?.message} />
             <TextField label="Not" value={note} onChangeText={(value) => setValue('note', value)} placeholder="İsteğe bağlı" multiline />
           </FieldGroup.Section>
@@ -421,53 +398,81 @@ export function ExpenseForm({ mode, dosya, initial }: ExpenseFormProps) {
             <FieldGroup.SectionHeader>
               <ExpenseAddHeader onAdd={addLine} />
             </FieldGroup.SectionHeader>
-            <ExpenseLineHeader />
-            {items.map((item, index) => {
-              const rowError = errors.items?.[index];
-              const amountError = rowError && 'amount' in rowError && typeof rowError.amount?.message === 'string' ? rowError.amount.message : undefined;
-              const noteError = rowError && 'note' in rowError && typeof rowError.note?.message === 'string' ? rowError.note.message : undefined;
-              return (
-                <ExpenseLineRow
-                  key={item.id}
-                  item={item}
-                  deletable
-                  active={openCell?.id === item.id}
-                  openColumn={openCell?.column ?? null}
-                  amountError={amountError}
-                  noteError={noteError}
-                  onOpen={pressCell}
-                  onType={(type) => {
-                    const previous = getValues('items').find((candidate) => candidate.id === item.id)?.type;
-                    patchItem(item.id, (current) => ({ ...current, type }));
-                    if (type !== previous) {
-                      setOpenCell(null);
+            <Row spacing={8} alignment="center" style={{ width: '100%' }}>
+              <Text textStyle={{ color: colors.muted, fontSize: typeScale.body, fontWeight: '600' }}>{`Toplam (${items.length} kalem)`}</Text>
+              <Spacer flexible />
+              <Text textStyle={{ color: colors.navy, fontSize: typeScale.section, fontWeight: '700' }}>{formatKurus(total)}</Text>
+            </Row>
+          </FieldGroup.Section>
+          {items.map((item, index) => {
+            const rowError = errors.items?.[index];
+            const amountError = rowError && 'amount' in rowError && typeof rowError.amount?.message === 'string' ? rowError.amount.message : undefined;
+            const noteError = rowError && 'note' in rowError && typeof rowError.note?.message === 'string' ? rowError.note.message : undefined;
+            return (
+              <FieldGroup.Section key={item.id} title={`Kalem ${index + 1}`}>
+                <ExpenseTypeField
+                  appearance="menu"
+                  value={item.type}
+                  options={withCurrentExpenseType(expenseTypes, item.type)}
+                  onChange={(type) => patchItem(item.id, (current) => ({ ...current, type }))}
+                />
+                <TextField
+                  label="Tutar"
+                  value={item.amount}
+                  onChangeText={(value) => patchItem(item.id, (current) => ({ ...current, amount: value }))}
+                  onBlur={() => {
+                    const kurus = parseTlToKurus(item.amount);
+                    if (kurus !== null) {
+                      patchItem(item.id, (current) => ({ ...current, amount: formatAmountInput(kurus) }));
                     }
                   }}
-                  onAmount={(value) => patchItem(item.id, (current) => ({ ...current, amount: value }))}
-                  onNote={(value) => patchItem(item.id, (current) => ({ ...current, note: value }))}
-                  onAddLibrary={() => void addDocuments(item.id, 'library')}
-                  onAddCamera={() => void addDocuments(item.id, 'camera')}
-                  onAddPdf={() => void addDocuments(item.id, 'pdf')}
-                  onOpenAttachment={(attachment) => void openAttachment(attachment)}
-                  onRemoveAttachment={(attachment) => removeAttachment(item.id, attachment)}
-                  onRetry={(attachment) => void uploadAttachment(item.id, attachment.id)}
-                  onDelete={deleteLine}
-                  typeOptions={expenseTypes}
+                  error={amountError}
+                  keyboardType="decimal-pad"
+                  placeholder="0,00"
                 />
-              );
-            })}
-            <ExpenseLineTotal amount={formatKurus(total)} />
-            {summary ? <Text textStyle={{ color: colors.danger, fontSize: typeScale.body }}>{summary}</Text> : null}
-          </FieldGroup.Section>
+                <TextField
+                  label="Not"
+                  value={item.note ?? ''}
+                  onChangeText={(value) => patchItem(item.id, (current) => ({ ...current, note: value }))}
+                  error={noteError}
+                  placeholder="İsteğe bağlı"
+                  multiline
+                />
+                <Row spacing={8}>
+                  <Button label="Galeri" variant="secondary" onPress={() => void addDocuments(item.id, 'library')} />
+                  <Button label="Kamera" variant="secondary" onPress={() => void addDocuments(item.id, 'camera')} />
+                  <Button label="PDF" variant="secondary" onPress={() => void addDocuments(item.id, 'pdf')} />
+                </Row>
+                <AttachmentList
+                  attachments={item.attachments}
+                  onOpen={(attachment) => void openAttachment(attachment)}
+                  onRemove={(attachment) => removeAttachment(item.id, attachment)}
+                  onRetry={(attachment) => void uploadAttachment(item.id, attachment.id)}
+                />
+                <Button label="Kalemi sil" variant="danger" onPress={() => deleteLine(item)} />
+              </FieldGroup.Section>
+            );
+          })}
+          {summary ? (
+            <FieldGroup.Section>
+              <Text textStyle={{ color: colors.danger, fontSize: typeScale.body }}>{summary}</Text>
+            </FieldGroup.Section>
+          ) : null}
         </FieldGroup>
         </ScreenHost>
       </View>
-      <Modal visible={previewUri !== null} animationType="fade" onRequestClose={() => setPreviewUri(null)}>
+      <Modal visible={previewUri !== null} animationType="fade" statusBarTranslucent onRequestClose={() => setPreviewUri(null)}>
         <View style={styles.preview}>
-          {previewUri ? <NativePhoto uri={previewUri} /> : null}
-          <Host matchContents colorScheme="light" seedColor={colors.navy}>
-            <Button label="Kapat" onPress={() => setPreviewUri(null)} />
-          </Host>
+          {previewUri ? <Image source={{ uri: previewUri }} style={styles.previewImage} contentFit="contain" accessibilityLabel="Fotoğraf önizleme" /> : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kapat"
+            onPress={() => setPreviewUri(null)}
+            hitSlop={12}
+            style={[styles.previewClose, { top: insets.top + 8 }]}
+          >
+            <BarText style={styles.previewCloseLabel}>Kapat</BarText>
+          </Pressable>
         </View>
       </Modal>
     </>
@@ -490,7 +495,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   saveSlot: { minWidth: 72, alignItems: 'flex-end', paddingRight: space.sm },
-  preview: { flex: 1, backgroundColor: '#000000', padding: 16, justifyContent: 'flex-end', gap: 16 },
+  savePill: {
+    minWidth: 72,
+    alignItems: 'center',
+    marginRight: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: colors.navy,
+  },
+  savePillLabel: { color: colors.onNavy, fontSize: typeScale.label, fontWeight: '700' },
+  hero: {
+    marginHorizontal: space.lg,
+    marginTop: space.xs,
+    marginBottom: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.navy,
+    gap: space.xs,
+  },
+  heroKicker: { color: 'rgba(255, 255, 255, 0.65)', fontSize: typeScale.small, fontWeight: '600', letterSpacing: 0.8 },
+  heroTitle: { color: colors.onNavy, fontSize: typeScale.title, fontWeight: '700' },
+  heroChips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
+  heroChip: { maxWidth: '100%', paddingHorizontal: space.md, paddingVertical: 5, borderRadius: 14, backgroundColor: 'rgba(255, 255, 255, 0.14)' },
+  heroChipText: { color: colors.onNavy, fontSize: typeScale.label, fontWeight: '500' },
+  preview: { flex: 1, backgroundColor: '#000000' },
+  previewClose: { position: 'absolute', left: 16, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 16, backgroundColor: 'rgba(255, 255, 255, 0.22)' },
+  previewCloseLabel: { color: '#FFFFFF', fontSize: typeScale.body, fontWeight: '600' },
   previewImage: { flex: 1 },
   save: { paddingHorizontal: 4 },
   saveLabel: { color: colors.navy, fontSize: typeScale.body, fontWeight: '600' },

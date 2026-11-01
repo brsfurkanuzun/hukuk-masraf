@@ -43,6 +43,7 @@ function asDosya(id: string, data: DocumentData): Dosya {
     id,
     ownerId: data.ownerId,
     assignedUserIds: data.assignedUserIds.filter((uid): uid is string => typeof uid === 'string'),
+    ...(typeof data.clientId === 'string' && data.clientId ? { clientId: data.clientId } : {}),
     clientName: String(data.clientName ?? ''),
     clientNameNormalized: String(data.clientNameNormalized ?? ''),
     debtorName: String(data.debtorName ?? ''),

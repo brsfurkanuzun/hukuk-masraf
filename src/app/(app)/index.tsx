@@ -60,15 +60,19 @@ export default function DosyaListScreen() {
           <ErrorState message={toUserMessage(query.error)} onRetry={() => void query.refetch()} />
         ) : items.length === 0 ? (
           <EmptyState
-            title="Atanan dosya yok"
+            title={filters.searchText.trim() ? 'Sonuç bulunamadı' : 'Atanan dosya yok'}
             message={
-              user?.uid
-                ? `assignedUserIds içinde şu UID olmalı:\n${user.uid}\n\nFirestore’daki dosyada bu UID yoksa veya kurallar güncel değilse liste boş kalır. Profil → UID ile Console’u karşılaştırın.`
-                : 'Size atanmış bir dosya bulunamadı.'
+              filters.searchText.trim()
+                ? 'Aramanıza uyan dosya yok. Farklı bir ifade deneyin.'
+                : 'Size atanmış bir dosya bulunamadı. Dosya atandığında burada görünür.'
             }
           />
         ) : (
-          clients.flatMap((client) => {
+          [
+            <Text key="summary" textStyle={{ color: colors.faint, fontSize: 13, fontWeight: '600' }}>
+              {`${clients.length} müvekkil · ${items.length} dosya${query.hasNextPage ? '+' : ''}`}
+            </Text>,
+            ...clients.flatMap((client) => {
             const open = openClients.includes(client.key);
             const header = (
               <ListItem
@@ -78,8 +82,9 @@ export default function DosyaListScreen() {
                     current.includes(client.key) ? current.filter((key) => key !== client.key) : [...current, client.key],
                   )
                 }
+                leading={<Text textStyle={{ color: colors.navy, fontSize: 20, fontWeight: '700' }}>{client.name.charAt(0).toLocaleUpperCase('tr')}</Text>}
                 supportingText={`${client.dosyalar.length} dosya`}
-                trailing={<Text textStyle={{ color: colors.faint, fontSize: 22, fontWeight: '400' }}>{open ? '⌄' : '›'}</Text>}
+                trailing={<Text textStyle={{ color: colors.faint, fontSize: 20, fontWeight: '400' }}>{open ? '▾' : '▸'}</Text>}
               >
                 {client.name}
               </ListItem>
@@ -94,13 +99,14 @@ export default function DosyaListScreen() {
                   key={item.id}
                   onPress={() => router.push(`/dosya/${item.id}` as Href)}
                   supportingText={`Esas No: ${item.fileCaseNumber}${item.enforcementOffice ? ` · ${item.enforcementOffice}` : ''}`}
-                  trailing={<Text textStyle={{ color: colors.faint, fontSize: 22, fontWeight: '400' }}>›</Text>}
+                  trailing={<Text textStyle={{ color: colors.faint, fontSize: 20, fontWeight: '400' }}>▸</Text>}
                 >
                   {item.debtorName.trim() || item.fileCaseNumber}
                 </ListItem>
               )),
             ];
-          })
+          }),
+          ]
         )}
         {query.hasNextPage ? <Button variant="ghost" label={query.isFetchingNextPage ? 'Yükleniyor…' : 'Daha fazla'} onPress={() => void query.fetchNextPage()} disabled={query.isFetchingNextPage} /> : null}
       </FittingList>

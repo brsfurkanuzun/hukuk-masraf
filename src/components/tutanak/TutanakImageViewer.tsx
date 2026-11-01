@@ -10,10 +10,10 @@ import type { AttachmentMeta } from '@/models/expense';
 import { type as typeScale } from '@/constants/theme';
 import { toUserMessage } from '@/utils/errors';
 
-export function TutanakImageViewer({ images, onClose }: { images: AttachmentMeta[]; onClose: () => void }) {
+export function TutanakImageViewer({ images, onClose, initialIndex = 0 }: { images: AttachmentMeta[]; onClose: () => void; initialIndex?: number }) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(initialIndex);
   const [sharing, setSharing] = useState(false);
 
   async function shareCurrent() {
@@ -45,6 +45,7 @@ export function TutanakImageViewer({ images, onClose }: { images: AttachmentMeta
         <ScrollView
           horizontal
           pagingEnabled
+          contentOffset={{ x: initialIndex * width, y: 0 }}
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={(event) => setPage(Math.round(event.nativeEvent.contentOffset.x / width))}
         >

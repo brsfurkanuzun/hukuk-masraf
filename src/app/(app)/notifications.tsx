@@ -1,53 +1,48 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
-import { useCallback, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SymbolView } from 'expo-symbols';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 
-import { AppBackButton } from '@/components/common/AppBackButton';
-import { TutanakImageViewer } from '@/components/tutanak/TutanakImageViewer';
-import { colors, space, type as typeScale } from '@/constants/theme';
-import { useTutanakNotices } from '@/hooks/useTutanakNotices';
+import { Loader } from '@/components/common/Loader';
+import { TutanakAttachmentsViewer } from '@/components/tutanak/TutanakAttachmentsViewer';
+import { colors, radius, space, type as typeScale } from '@/constants/theme';
+import { useNoticeReadState, useTutanakNotices } from '@/hooks/useTutanakNotices';
 import type { AttachmentMeta } from '@/models/expense';
-import { useAuth } from '@/providers/AuthProvider';
-import { markNoticesRead, type TutanakNotice } from '@/services/tutanak/tutanakNoticeService';
+import type { TutanakNotice } from '@/services/tutanak/tutanakNoticeService';
 import { getTutanak } from '@/services/tutanak/tutanakService';
-import { logError, toUserMessage } from '@/utils/errors';
+import { toUserMessage } from '@/utils/errors';
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
   const query = useTutanakNotices();
   const refetchNotices = query.refetch;
+  const readState = useNoticeReadState();
+  const refetchRead = readState.refetch;
 
   useFocusEffect(
     useCallback(() => {
       void refetchNotices();
-      if (!user) {
-        return;
-      }
-      void markNoticesRead(user.uid)
-        .then(() => queryClient.invalidateQueries({ queryKey: ['notice-read', user.uid] }))
-        .catch((error: unknown) => logError('notice-read', error));
-    }, [queryClient, refetchNotices, user]),
+      refetchRead();
+    }, [refetchNotices, refetchRead]),
   );
   const [images, setImages] = useState<AttachmentMeta[] | null>(null);
-  const notices = query.data ?? [];
+  const sections = useMemo(() => groupByDay(query.data ?? []), [query.data]);
 
   async function openNotice(notice: TutanakNotice) {
+    // Bildirim, dokunulunca okunmuş sayılır.
+    readState.markRead(notice);
     if (notice.kind === 'dosya') {
       router.push(`/dosya/${notice.dosyaId}` as Href);
       return;
     }
     try {
       const tutanak = await getTutanak(notice.dosyaId, notice.id);
-      const photos = tutanak?.attachments.filter((attachment) => attachment.resourceType === 'image' && attachment.url) ?? [];
-      if (photos.length === 0) {
-        Alert.alert('Görsel yok', 'Bu tutanakta açılacak bir görsel yok.');
+      const files = tutanak?.attachments.filter((attachment) => attachment.url) ?? [];
+      if (files.length === 0) {
+        Alert.alert('Ek yok', 'Bu tutanakta açılacak bir ek yok.');
         return;
       }
-      setImages(photos);
+      setImages(files);
     } catch (error) {
       Alert.alert('Açılamadı', toUserMessage(error));
     }
@@ -57,7 +52,7 @@ export default function NotificationsScreen() {
     return (
       <NotificationsFrame>
         <View style={styles.centered}>
-          <ActivityIndicator color={colors.navy} />
+          <Loader label="Bildirimler yükleniyor" />
         </View>
       </NotificationsFrame>
     );
@@ -78,48 +73,130 @@ export default function NotificationsScreen() {
 
   return (
     <NotificationsFrame>
-      <FlatList
-        data={notices}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={notices.length === 0 ? styles.emptyList : undefined}
-        ListEmptyComponent={<Text style={styles.empty}>Bildirim yok</Text>}
-        renderItem={({ item }) => (
-          <Pressable accessibilityRole="button" onPress={() => void openNotice(item)} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
-            <Text style={styles.title}>{noticeText(item)}</Text>
-          </Pressable>
-        )}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={sections.length === 0 ? styles.emptyList : styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyBox}>
+            <View style={styles.emptyIcon}>
+              <BellGlyph color={colors.faint} />
+            </View>
+            <Text style={styles.emptyTitle}>Bildirim yok</Text>
+            <Text style={styles.emptyHint}>Yeni tutanak ve dosya atamaları burada görünür.</Text>
+          </View>
+        }
+        renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
+        renderItem={({ item, index, section }) => {
+          const unread = readState.isUnread(item);
+          const first = index === 0;
+          const last = index === section.data.length - 1;
+          return (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void openNotice(item)}
+              style={({ pressed }) => [
+                styles.card,
+                first && styles.cardFirst,
+                last && styles.cardLast,
+                !last && styles.cardDivider,
+                pressed && styles.cardPressed,
+              ]}
+            >
+              <View style={[styles.iconCircle, item.kind === 'dosya' ? styles.iconDosya : styles.iconTutanak]}>
+                {item.kind === 'dosya' ? <FolderGlyph color={colors.navy} /> : <PageGlyph color={colors.accent} />}
+              </View>
+              <View style={styles.body}>
+                <View style={styles.titleRow}>
+                  <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
+                    {item.kind === 'dosya' ? 'Dosya atandı' : 'Yeni tutanak'}
+                  </Text>
+                  <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
+                </View>
+                <Text style={styles.detail} numberOfLines={2}>
+                  {noticeText(item)}
+                </Text>
+              </View>
+              {unread ? <View style={styles.unreadDot} /> : null}
+            </Pressable>
+          );
+        }}
       />
-      {images ? <TutanakImageViewer images={images} onClose={() => setImages(null)} /> : null}
+      {images ? <TutanakAttachmentsViewer attachments={images} onClose={() => setImages(null)} /> : null}
     </NotificationsFrame>
   );
 }
 
 function NotificationsFrame({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <View style={styles.topBar}>
-        <AppBackButton onPress={() => router.back()} />
-        <Text style={styles.topTitle} numberOfLines={1}>
-          Bildirimler
-        </Text>
-        <View style={styles.topSlot} />
-      </View>
-      {children}
-    </View>
-  );
+  return <View style={styles.screen}>{children}</View>;
 }
 
 function noticeText(notice: TutanakNotice): string {
+  const debtor = notice.debtorName.trim();
   if (notice.kind === 'dosya') {
-    const debtor = notice.debtorName.trim();
-    return debtor ? `Kullanıcınıza dosya tanımlanmıştır · ${debtor}` : 'Kullanıcınıza dosya tanımlanmıştır';
+    return debtor ? `${debtor} dosyası size tanımlandı` : 'Size bir dosya tanımlandı';
   }
-  if (!notice.debtorName.trim()) {
-    return `${notice.actorName} bir dosyaya tutanak ekledi`;
+  const actor = notice.actorName.trim() || 'Bir kullanıcı';
+  return debtor ? `${actor}, ${debtor} dosyasına tutanak ekledi` : `${actor} bir dosyaya tutanak ekledi`;
+}
+
+function dayKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function dayTitle(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return 'Daha önce';
   }
-  return `${notice.actorName} ${notice.debtorName.trim()} dosyasına tutanak ekledi`;
+  const now = new Date();
+  if (dayKey(date) === dayKey(now)) {
+    return 'Bugün';
+  }
+  if (dayKey(date) === dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) {
+    return 'Dün';
+  }
+  return date.toLocaleDateString('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  });
+}
+
+function formatTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function groupByDay(notices: TutanakNotice[]): { title: string; data: TutanakNotice[] }[] {
+  const sections: { key: string; title: string; data: TutanakNotice[] }[] = [];
+  for (const notice of notices) {
+    const date = new Date(notice.createdAt);
+    const key = Number.isNaN(date.getTime()) ? '' : dayKey(date);
+    const last = sections[sections.length - 1];
+    if (last && last.key === key) {
+      last.data.push(notice);
+    } else {
+      sections.push({ key, title: dayTitle(notice.createdAt), data: [notice] });
+    }
+  }
+  return sections;
+}
+
+function PageGlyph({ color }: { color: string }) {
+  return <SymbolView name={{ ios: 'doc.text.fill', android: 'description' }} size={22} tintColor={color} />;
+}
+
+function FolderGlyph({ color }: { color: string }) {
+  return <SymbolView name={{ ios: 'folder.fill', android: 'folder' }} size={22} tintColor={color} />;
+}
+
+function BellGlyph({ color }: { color: string }) {
+  return <SymbolView name={{ ios: 'bell.fill', android: 'notifications' }} size={30} tintColor={color} />;
 }
 
 const styles = StyleSheet.create({
@@ -139,16 +216,51 @@ const styles = StyleSheet.create({
   },
   topSlot: { width: 44 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.md, padding: space.lg, backgroundColor: colors.background },
-  emptyList: { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyList: { flexGrow: 1, justifyContent: 'center' },
+  listContent: { paddingHorizontal: space.lg, paddingBottom: space.xxl },
+  emptyBox: { alignItems: 'center', gap: space.sm, paddingHorizontal: space.xl },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.fill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space.sm,
+  },
+  emptyTitle: { color: colors.ink, fontSize: typeScale.section, fontWeight: '600' },
+  emptyHint: { color: colors.muted, fontSize: typeScale.label, textAlign: 'center' },
   empty: { color: colors.muted, fontSize: typeScale.body, textAlign: 'center' },
   retry: { color: colors.navy, fontSize: typeScale.body, fontWeight: '600' },
-  row: {
-    paddingHorizontal: space.lg,
+  sectionTitle: {
+    color: colors.muted,
+    fontSize: typeScale.label,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginTop: space.xl,
+    marginBottom: space.sm,
+    marginLeft: space.sm,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingHorizontal: space.md,
     paddingVertical: space.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
     backgroundColor: colors.surface,
   },
-  rowPressed: { backgroundColor: colors.fill },
-  title: { color: colors.ink, fontSize: typeScale.body },
+  cardFirst: { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  cardLast: { borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
+  cardDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  cardPressed: { backgroundColor: colors.fill },
+  iconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  iconDosya: { backgroundColor: '#E3EDF6' },
+  iconTutanak: { backgroundColor: colors.accentSoft },
+  body: { flex: 1, gap: 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: space.sm },
+  title: { flexShrink: 1, color: colors.ink, fontSize: typeScale.body, fontWeight: '500' },
+  titleUnread: { fontWeight: '700' },
+  time: { color: colors.faint, fontSize: typeScale.small },
+  detail: { color: colors.muted, fontSize: typeScale.label, lineHeight: 18 },
+  unreadDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.navy },
 });

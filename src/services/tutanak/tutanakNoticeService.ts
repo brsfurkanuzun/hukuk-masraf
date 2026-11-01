@@ -25,7 +25,7 @@ export async function listTutanakNotices(uid: string): Promise<TutanakNotice[]> 
       if (typeof data.dosyaId !== 'string' || typeof data.createdAt !== 'string') {
         return [];
       }
-      const kind = data.kind === 'dosya' ? 'dosya' : 'tutanak';
+      const kind: TutanakNotice['kind'] = data.kind === 'dosya' ? 'dosya' : 'tutanak';
       if (kind === 'tutanak' && typeof data.actorName !== 'string') {
         return [];
       }
@@ -49,6 +49,25 @@ export async function loadNoticeReadAt(uid: string): Promise<string> {
   recordDocumentReads(1);
   const value = snapshot.data()?.lastReadAt;
   return typeof value === 'string' ? value : '';
+}
+
+const MAX_READ_IDS = 300;
+
+/** Kullanıcının dokunarak okundu işaretlediği bildirim kimlikleri. */
+export async function loadReadNoticeIds(uid: string): Promise<string[]> {
+  const snapshot = await getDocFromServer(doc(getFirebase().db, 'users', uid, 'meta', 'noticeRead'));
+  recordDocumentReads(1);
+  const value = snapshot.data()?.readIds;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+export async function markNoticeRead(uid: string, noticeId: string): Promise<void> {
+  const current = await loadReadNoticeIds(uid);
+  if (current.includes(noticeId)) {
+    return;
+  }
+  const readIds = [...current, noticeId].slice(-MAX_READ_IDS);
+  await setDoc(doc(getFirebase().db, 'users', uid, 'meta', 'noticeRead'), { readIds, updatedAt: nowIso() });
 }
 
 export async function markNoticesRead(uid: string): Promise<void> {

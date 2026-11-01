@@ -1,12 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
+import { Loader } from '@/components/common/Loader';
 import { colors, space, type as typeScale } from '@/constants/theme';
 
 export function LoadingState({ label = 'Yükleniyor' }: { label?: string }) {
   return (
     <View style={styles.block}>
-      <Text style={styles.title}>{label}</Text>
+      <Loader label={label} />
     </View>
   );
 }

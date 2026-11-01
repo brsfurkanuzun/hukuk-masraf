@@ -39,7 +39,7 @@ export function HomeToolbar({ title, onAdd, onNotifications, hasUnread = false, 
         <RNHostView matchContents>
           <Pressable accessibilityRole="button" accessibilityLabel="Bildirimler" hitSlop={8} onPress={onNotifications} style={{ width: 32, height: 32 }}>
             <SymbolView name={{ ios: 'bell', android: 'notifications', web: 'notifications' }} size={24} tintColor={colors.navy} />
-            {hasUnread ? <View style={{ position: 'absolute', top: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFCC00' }} /> : null}
+            {hasUnread ? <View style={{ position: 'absolute', top: 0, right: 0, width: 13, height: 13, borderRadius: 7, backgroundColor: '#FFCC00', borderWidth: 2, borderColor: '#F2F2F7' }} /> : null}
           </Pressable>
         </RNHostView>
       ) : null}

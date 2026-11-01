@@ -21,7 +21,7 @@ export interface DosyaCursor {
 }
 
 export function emptyDosyaFilters(): DosyaFilters {
-  return { searchField: 'client', searchText: '' };
+  return { searchField: 'case', searchText: '' };
 }
 
 export function buildDosyaQueryPlan(filters: DosyaFilters): DosyaQueryPlan {

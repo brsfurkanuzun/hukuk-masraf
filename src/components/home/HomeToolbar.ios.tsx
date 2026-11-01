@@ -53,7 +53,7 @@ export function HomeToolbar({ title, onAdd, onNotifications, hasUnread = false, 
           <Button onPress={onNotifications} modifiers={[buttonStyle('plain'), frame({ width: 44, height: 44 })]}>
             <Image systemName="bell" size={22} color={colors.navy} />
           </Button>
-          {hasUnread ? <Circle modifiers={[frame({ width: 10, height: 10 }), foregroundStyle('#FFCC00')]} /> : null}
+          {hasUnread ? <Circle modifiers={[frame({ width: 13, height: 13 }), foregroundStyle('#FFCC00')]} /> : null}
         </ZStack>
       ) : null}
     </HStack>
