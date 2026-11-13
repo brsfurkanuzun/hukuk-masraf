@@ -23,6 +23,8 @@ export interface ExpenseItem {
   attachments: AttachmentMeta[];
 }
 
+export type ExpenseDeliveryStatus = 'new' | 'delivered';
+
 export interface Expense {
   id: string;
   dosyaId: string;
@@ -41,6 +43,8 @@ export interface Expense {
   expenseItems: ExpenseItem[];
   totalAmountKurus: number;
   currency: 'TRY';
+  /** Web'de admin "Teslim Edildi" yapınca 'delivered' olur; yoksa masraf yenidir. */
+  deliveryStatus?: ExpenseDeliveryStatus;
   createdAt: string;
   updatedAt: string;
 }

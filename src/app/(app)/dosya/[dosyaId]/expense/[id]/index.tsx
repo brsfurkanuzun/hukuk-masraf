@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useNavigation, useRouter, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Text as BarText, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Alert, Text as BarText, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ErrorState, LoadingState } from '@/components/common/StateViews';
 import { TutanakAttachmentsViewer } from '@/components/tutanak/TutanakAttachmentsViewer';
 import { ExpenseItemsList } from '@/components/expenses/ExpenseItemsList';
+import { ExpenseStatusBadge } from '@/components/expenses/ExpenseStatusBadge';
 import { ExpenseSummaryCard } from '@/components/expenses/ExpenseSummaryCard';
 import { ScreenHost } from '@/components/native/ScreenHost';
 import { expenseTypeLabel } from '@/constants/expenseTypes';
@@ -32,8 +33,8 @@ export default function DosyaExpenseDetailScreen() {
   const query = useExpense(dosyaId, expenseId);
   const expense = query.data;
   const [viewer, setViewer] = useState<{ items: AttachmentMeta[]; id: string } | null>(null);
-  // Düzenleme ve silme yalnızca masrafı giren kullanıcıya açık.
-  const canEdit = Boolean(expense && user && expense.userId === user.uid);
+  // Düzenleme ve silme yalnızca masrafı giren kullanıcıya açık; teslim edilen masraf kilitlenir.
+  const canEdit = Boolean(expense && user && expense.userId === user.uid && expense.deliveryStatus !== 'delivered');
   const editRef = useRef<() => void>(() => {});
   editRef.current = () => {
     if (dosyaId && expenseId) {
@@ -103,6 +104,9 @@ export default function DosyaExpenseDetailScreen() {
   return (
     <>
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+      <View style={styles.statusRow}>
+        <ExpenseStatusBadge status={expense.deliveryStatus} />
+      </View>
       <ExpenseSummaryCard
         summary={{
           debtorName: expense.debtorName,
@@ -144,6 +148,7 @@ export default function DosyaExpenseDetailScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: 4, paddingBottom: 40 },
+  statusRow: { paddingHorizontal: 16, paddingBottom: 8 },
   delete: { marginHorizontal: 16, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.dangerSoft },
   deletePressed: { opacity: 0.7 },
   deleteLabel: { color: colors.danger, fontSize: typeScale.body, fontWeight: '600' },

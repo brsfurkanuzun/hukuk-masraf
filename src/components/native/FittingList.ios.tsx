@@ -12,11 +12,14 @@ export function FittingList({
   header,
   footer,
   onRefresh,
+  reserveBottom = 0,
 }: {
   children: ReactNode;
   header?: ReactNode;
   footer: ReactNode;
   onRefresh?: () => Promise<void>;
+  /** Altta başka bir öğeye (ör. sürüm yazısı) ayrılan yükseklik. */
+  reserveBottom?: number;
 }) {
   const [contentHeight, setContentHeight] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -25,7 +28,7 @@ export function FittingList({
   const geometryModifier = useScrollGeometryChange((geometry) => {
     setContentHeight((current) => settle(current, geometry.contentHeight));
   });
-  const available = viewportHeight > 0 ? Math.max(viewportHeight - headerHeight - footerHeight, 0) : 0;
+  const available = viewportHeight > 0 ? Math.max(viewportHeight - headerHeight - footerHeight - reserveBottom, 0) : 0;
   const listHeight = contentHeight > 0 && available > 0 ? Math.min(contentHeight, available) : available;
   const listFrame =
     listHeight > 0

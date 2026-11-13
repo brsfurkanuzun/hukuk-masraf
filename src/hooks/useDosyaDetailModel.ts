@@ -21,12 +21,14 @@ export function useDosyaDetailModel(dosyaId: string) {
   const tutanaklar = !tutanakQuery.isLoading && !tutanakQuery.isError ? (tutanakQuery.data ?? []) : [];
   const [refreshing, setRefreshing] = useState(false);
 
+  // Özel müvekkil dosyasında yalnızca masraf eklenir.
+  const specialDosya = Boolean(dosya?.visibleToRole);
   const addMenuItems = useMemo<AddMenuItem[]>(
     () => [
       { label: 'Masraf Ekle', onPress: () => router.push(`/dosya/${dosyaId}/expense/new` as Href) },
-      { label: 'Tutanak Ekle', onPress: () => router.push(`/dosya/${dosyaId}/tutanak/new` as Href) },
+      ...(specialDosya ? [] : [{ label: 'Tutanak Ekle', onPress: () => router.push(`/dosya/${dosyaId}/tutanak/new` as Href) }]),
     ],
-    [dosyaId, router],
+    [dosyaId, router, specialDosya],
   );
 
   const onRefresh = useCallback(async () => {

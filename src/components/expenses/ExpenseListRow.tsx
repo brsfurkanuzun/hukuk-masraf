@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ExpenseStatusBadge } from '@/components/expenses/ExpenseStatusBadge';
 import { colors, space, type as typeScale } from '@/constants/theme';
 import type { Expense } from '@/models/expense';
 import { displayTotalKurus } from '@/services/expenses/mapExpense';
@@ -14,7 +15,10 @@ export function ExpenseListRow({ expense, authorName, onPress }: { expense: Expe
         <Text style={styles.title}>{formatTrDate(expense.expenseDate)}</Text>
         {name ? <Text style={styles.date}>{name}</Text> : null}
       </View>
-      <Text style={styles.amount}>{formatKurus(displayTotalKurus(expense))}</Text>
+      <View style={styles.end}>
+        <Text style={styles.amount}>{formatKurus(displayTotalKurus(expense))}</Text>
+        <ExpenseStatusBadge status={expense.deliveryStatus} />
+      </View>
     </Pressable>
   );
 }
@@ -33,5 +37,6 @@ const styles = StyleSheet.create({
   main: { flex: 1, gap: 2 },
   title: { color: colors.ink, fontSize: typeScale.body, fontWeight: '500' },
   date: { color: colors.faint, fontSize: typeScale.small },
+  end: { alignItems: 'flex-end', gap: 4 },
   amount: { color: colors.ink, fontSize: typeScale.body, fontWeight: '600' },
 });

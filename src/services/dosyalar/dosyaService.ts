@@ -44,6 +44,7 @@ function asDosya(id: string, data: DocumentData): Dosya {
     ownerId: data.ownerId,
     assignedUserIds: data.assignedUserIds.filter((uid): uid is string => typeof uid === 'string'),
     ...(typeof data.clientId === 'string' && data.clientId ? { clientId: data.clientId } : {}),
+    ...(typeof data.visibleToRole === 'string' && data.visibleToRole ? { visibleToRole: data.visibleToRole } : {}),
     clientName: String(data.clientName ?? ''),
     clientNameNormalized: String(data.clientNameNormalized ?? ''),
     debtorName: String(data.debtorName ?? ''),
@@ -57,8 +58,9 @@ function asDosya(id: string, data: DocumentData): Dosya {
   };
 }
 
+/** İstemci tarafı ön kontrol; asıl yetki Firestore kurallarında (özel dosyada rol denetimi orada yapılır). */
 export function canAccessDosya(dosya: Dosya, uid: string): boolean {
-  return dosya.ownerId === uid || dosya.assignedUserIds.includes(uid);
+  return dosya.ownerId === uid || dosya.assignedUserIds.includes(uid) || Boolean(dosya.visibleToRole);
 }
 
 function constraintsForAssigned(uid: string, plan: DosyaQueryPlan, cursor: DosyaCursor | null): QueryConstraint[] {
@@ -100,6 +102,26 @@ export async function listAssignedDosyalar(uid: string, plan: DosyaQueryPlan, cu
       items.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
     } catch {
       // ownerId + updatedAt index henüz hazır olmayabilir; atanan dosya sorgusu yeterli.
+    }
+  }
+
+  // Özel müvekkil dosyaları: rolü Avukat olan herkese atama olmadan gelir. Rol uymuyorsa kurallar reddeder, yok sayılır.
+  if ((plan.mode === 'recent' || plan.mode === 'case') && cursor === null) {
+    try {
+      const sharedSnapshot = await getDocsFromServer(query(dosyaCollection(), where('visibleToRole', '==', 'avukat'), limit(PAGE_SIZE)));
+      recordDocumentReads(sharedSnapshot.size);
+      const seen = new Set(items.map((item) => item.id));
+      for (const document of sharedSnapshot.docs) {
+        const dosya = asDosya(document.id, document.data());
+        const matches = plan.mode === 'recent' || dosya.fileCaseNumberNormalized.startsWith(plan.prefix);
+        if (matches && !seen.has(dosya.id)) {
+          seen.add(dosya.id);
+          items.push(dosya);
+        }
+      }
+      items.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+    } catch {
+      // Rol Avukat değilse okuma reddedilir; özel dosyalar listeye eklenmez.
     }
   }
 

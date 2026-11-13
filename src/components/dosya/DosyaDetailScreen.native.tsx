@@ -102,13 +102,27 @@ export default function DosyaDetailScreen() {
 
   const authorNames = useAuthorNames([...model.items.map((item) => item.userId), ...model.tutanaklar.map((item) => item.userId)]);
 
-  // Toplam tutar yalnızca tüm masraflar yüklendiyse doğru olur.
-  const stats: DosyaStat[] = [
+  // Özel müvekkil dosyasında (Genel Giderler) tutanak bölümü gösterilmez; yalnızca masraf girilir.
+  const hideTutanak = Boolean(model.dosya?.visibleToRole);
+
+  const expenseCount = `${model.items.length}${model.query.hasNextPage ? '+' : ''}`;
+  const expenseTotal = model.listReady
+    ? `${formatKurus(sumKurus(model.items.map((item) => displayTotalKurus(item))))}${model.query.hasNextPage ? '+' : ''}`
+    : '—';
+
+  // Özel müvekkil dosyasında kart yalnızca masraf sayısını ve toplam tutarı gösterir (daha çok yüklenecek masraf varsa "+" eklenir).
+  // Diğer dosyalarda toplam yalnızca tüm masraflar yüklendiyse gösterilir, çünkü eksik toplam yanıltıcı olur.
+  const stats: DosyaStat[] = hideTutanak
+    ? [
+        { label: 'Masraf', value: expenseCount, weight: 1 },
+        { label: 'Toplam tutar', value: expenseTotal, weight: 2 },
+      ]
+    : [
     { label: 'Masraf', value: `${model.items.length}${model.query.hasNextPage ? '+' : ''}`, weight: 0.8 },
     ...(model.listReady && !model.query.hasNextPage
       ? [{ label: 'Toplam masraf', value: formatKurus(sumKurus(model.items.map((item) => displayTotalKurus(item)))), weight: 2 }]
       : []),
-    { label: 'Tutanak', value: String(model.tutanaklar.length), weight: 0.9 },
+    ...(hideTutanak ? [] : [{ label: 'Tutanak', value: String(model.tutanaklar.length), weight: 0.9 }]),
   ];
 
   useFocusEffect(
@@ -182,7 +196,7 @@ export default function DosyaDetailScreen() {
         {model.listReady ? (
           <View style={styles.list}>
             {model.items.map((item) => (
-              <SwipeDeleteRow key={item.id} enabled={item.userId === user?.uid} onDelete={() => confirmDeleteExpense(item.id)}>
+              <SwipeDeleteRow key={item.id} enabled={item.userId === user?.uid && item.deliveryStatus !== 'delivered'} onDelete={() => confirmDeleteExpense(item.id)}>
                 <ExpenseListRow expense={item} authorName={authorNames[item.userId]} onPress={() => model.openExpense(item.id)} />
               </SwipeDeleteRow>
             ))}
@@ -198,53 +212,57 @@ export default function DosyaDetailScreen() {
             <Text style={styles.moreLabel}>{model.query.isFetchingNextPage ? 'Yükleniyor…' : 'Daha fazla'}</Text>
           </Pressable>
         ) : null}
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Tutanak</Text>
-          {model.tutanaklar.length > 0 ? (
-            <View style={styles.sectionBadge}>
-              <Text style={styles.sectionMeta}>{`${model.tutanaklar.length} kayıt`}</Text>
+        {hideTutanak ? null : (
+          <>
+          <View style={styles.sectionHead}>
+            <Text style={styles.sectionTitle}>Tutanak</Text>
+            {model.tutanaklar.length > 0 ? (
+              <View style={styles.sectionBadge}>
+                <Text style={styles.sectionMeta}>{`${model.tutanaklar.length} kayıt`}</Text>
+              </View>
+            ) : null}
+          </View>
+          {model.tutanakQuery.isLoading ? (
+            <View style={styles.inlineState}>
+              <Loader label="Tutanaklar yükleniyor" />
             </View>
           ) : null}
-        </View>
-        {model.tutanakQuery.isLoading ? (
-          <View style={styles.inlineState}>
-            <Loader label="Tutanaklar yükleniyor" />
-          </View>
-        ) : null}
-        {model.tutanakQuery.isError ? (
-          <View style={styles.inlineState}>
-            <Text style={styles.error}>{toUserMessage(model.tutanakQuery.error)}</Text>
-            <Pressable accessibilityRole="button" onPress={() => void model.tutanakQuery.refetch()} style={styles.retry}>
-              <Text style={styles.retryLabel}>Tekrar dene</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {tutanakReady && model.tutanaklar.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Henüz tutanak yok</Text>
-            <Text style={styles.emptyHint}>Sağ üstteki + ile tutanak ekleyebilirsiniz.</Text>
-          </View>
-        ) : null}
-        {tutanakReady && model.tutanaklar.length > 0 ? (
-          <View style={styles.list}>
-            {model.tutanaklar.map((item) => (
-              <SwipeDeleteRow key={item.id} enabled={item.userId === user?.uid} onDelete={() => confirmDeleteTutanak(item.id)}>
-                <TutanakListRow
-                  tutanak={item}
-                  authorName={authorNames[item.userId]}
-                  onPress={() => {
-                    const files = item.attachments.filter((attachment) => attachment.url);
-                    if (files.length === 0) {
-                      Alert.alert('Ek yok', 'Bu tutanakta açılacak bir ek yok.');
-                      return;
-                    }
-                    setOpenImages(files);
-                  }}
-                />
-              </SwipeDeleteRow>
-            ))}
-          </View>
-        ) : null}
+          {model.tutanakQuery.isError ? (
+            <View style={styles.inlineState}>
+              <Text style={styles.error}>{toUserMessage(model.tutanakQuery.error)}</Text>
+              <Pressable accessibilityRole="button" onPress={() => void model.tutanakQuery.refetch()} style={styles.retry}>
+                <Text style={styles.retryLabel}>Tekrar dene</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {tutanakReady && model.tutanaklar.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>Henüz tutanak yok</Text>
+              <Text style={styles.emptyHint}>Sağ üstteki + ile tutanak ekleyebilirsiniz.</Text>
+            </View>
+          ) : null}
+          {tutanakReady && model.tutanaklar.length > 0 ? (
+            <View style={styles.list}>
+              {model.tutanaklar.map((item) => (
+                <SwipeDeleteRow key={item.id} enabled={item.userId === user?.uid} onDelete={() => confirmDeleteTutanak(item.id)}>
+                  <TutanakListRow
+                    tutanak={item}
+                    authorName={authorNames[item.userId]}
+                    onPress={() => {
+                      const files = item.attachments.filter((attachment) => attachment.url);
+                      if (files.length === 0) {
+                        Alert.alert('Ek yok', 'Bu tutanakta açılacak bir ek yok.');
+                        return;
+                      }
+                      setOpenImages(files);
+                    }}
+                  />
+                </SwipeDeleteRow>
+              ))}
+            </View>
+          ) : null}
+          </>
+        )}
       </ScrollView>
       {openImages ? <TutanakAttachmentsViewer attachments={openImages} onClose={() => setOpenImages(null)} /> : null}
     </View>

@@ -75,6 +75,7 @@ function mergeExpenseFromDosya(id: string, dosyaId: string, dosya: Dosya, data: 
     })),
     totalAmountKurus: Number(data.totalAmountKurus ?? 0),
     currency: 'TRY',
+    deliveryStatus: data.deliveryStatus === 'delivered' ? 'delivered' : 'new',
     createdAt: String(data.createdAt ?? ''),
     updatedAt: String(data.updatedAt ?? ''),
   };
@@ -90,9 +91,13 @@ function planForDosya(plan: QueryPlan): QueryPlan {
   return plan;
 }
 
-function constraintsFor(_dosyaId: string, plan: QueryPlan, cursor: ExpenseCursor | null): QueryConstraint[] {
+function constraintsFor(_dosyaId: string, plan: QueryPlan, cursor: ExpenseCursor | null, onlyUid: string | null = null): QueryConstraint[] {
   const effective = planForDosya(plan);
   const constraints: QueryConstraint[] = [];
+  // Özel müvekkil dosyası: kurallar yalnızca kendi masraflarının okunmasına izin verir, sorgu bunu belirtmeli.
+  if (onlyUid) {
+    constraints.push(where('userId', '==', onlyUid));
+  }
   if (effective.mode === 'date') {
     if (effective.from) {
       constraints.push(where('expenseDate', '>=', effective.from));
@@ -119,7 +124,7 @@ export async function listExpenses(
   cursor: ExpenseCursor | null,
 ): Promise<ExpensePage> {
   const dosya = await assertDosyaAccess(uid, dosyaId);
-  const snapshot = await getDocsFromServer(query(expenseCollection(dosyaId), ...constraintsFor(dosyaId, plan, cursor)));
+  const snapshot = await getDocsFromServer(query(expenseCollection(dosyaId), ...constraintsFor(dosyaId, plan, cursor, dosya.visibleToRole ? uid : null)));
   recordDocumentReads(snapshot.size);
   const items = snapshot.docs
     .filter((document) => !isSoftDeleted(document.data()))
@@ -160,7 +165,8 @@ export async function saveExpense(dosyaId: string, expense: Expense): Promise<vo
     currency: expense.currency,
     createdAt: expense.createdAt,
     updatedAt: expense.updatedAt,
-  });
+  // merge: webden verilen deliveryStatus alanı düzenlemede silinmesin.
+  }, { merge: true });
 }
 
 export async function deleteExpense(dosyaId: string, expenseId: string): Promise<void> {

@@ -1,7 +1,9 @@
 import { ListItem, Text } from '@expo/ui';
 import { useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
+import { View } from 'react-native';
 
+import { APP_VERSION_HEIGHT, AppVersionBar } from '@/components/common/AppVersion';
 import { Button } from '@/components/common/Button';
 import { DosyaFilterBar } from '@/components/dosya/DosyaFilterBar';
 import { EmptyState, ErrorState, LoadingState } from '@/components/common/StateViews';
@@ -44,13 +46,16 @@ export default function DosyaListScreen() {
   const clients = useMemo(() => groupByClient(items), [items]);
   const [openClients, setOpenClients] = useState<string[]>([]);
 
+  // Sürüm yazısı yerel Host dışında (RN katmanında) durur; Host içinde mutlak konum çalışmaz.
   return (
+    <View style={{ flex: 1 }}>
     <ScreenHost fill>
       <FittingList
         onRefresh={async () => {
           await refresh();
         }}
         header={<HomeToolbar title={heading} hasUnread={hasUnread} onNotifications={() => router.push('/notifications' as Href)} />}
+        reserveBottom={APP_VERSION_HEIGHT}
         footer={<Button label="Çıkış yap" variant="danger" onPress={() => void signOut()} />}
       >
         <DosyaFilterBar filters={filters} onChange={setFilters} />
@@ -111,5 +116,7 @@ export default function DosyaListScreen() {
         {query.hasNextPage ? <Button variant="ghost" label={query.isFetchingNextPage ? 'Yükleniyor…' : 'Daha fazla'} onPress={() => void query.fetchNextPage()} disabled={query.isFetchingNextPage} /> : null}
       </FittingList>
     </ScreenHost>
+    <AppVersionBar />
+    </View>
   );
 }

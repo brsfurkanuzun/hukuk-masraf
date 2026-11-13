@@ -84,8 +84,10 @@ service cloud.firestore {
           'currency',
           'createdAt',
           'updatedAt',
-          'deletedAt'
+          'deletedAt',
+          'deliveryStatus'
         ])
+        && (!data.keys().hasAny(['deliveryStatus']) || data.deliveryStatus in ['new', 'delivered'])
         && data.userId == request.auth.uid
         && (!data.keys().hasAny(['deletedAt']) || (data.deletedAt is string && data.deletedAt.size() == 24))
         && data.expenseDate is string
@@ -159,9 +161,27 @@ service cloud.firestore {
       return canAccessDosyaData(d);
     }
 
+    // Özel müvekkil dosyası (visibleToRole = 'avukat'): atama gerekmeden, rolü Avukat olan herkes erişir.
+    // Admin tüm rollerin yetkisine sahiptir, bu yüzden o da Avukat rolü gibi erişir.
+    function isAvukatRole() {
+      return signedIn()
+        && (
+          authRoleCode() in ['avukat', 'admin']
+          || (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('roleId', '') in ['avukat', 'admin']
+          )
+        );
+    }
+
     function canAccessDosyaData(d) {
       return signedIn()
-        && (request.auth.uid == d.ownerId || request.auth.uid in d.assignedUserIds);
+        && (
+          request.auth.uid == d.ownerId
+          || request.auth.uid in d.assignedUserIds
+          // Sorgu kısıtı (where visibleToRole == 'avukat') ile doğrudan eşleşebilsin diye düz alan karşılaştırması kullanılır.
+          || (d.visibleToRole == 'avukat' && isAvukatRole())
+        );
     }
 
     function dosyaOk(data) {
@@ -248,9 +268,11 @@ service cloud.firestore {
         && data.updatedAt.size() == 24;
     }
 
+    // Özel müvekkil dosyalarına tutanak eklenemez; yalnızca masraf girilir.
     function tutanakInDosyaOk(dosyaId, data) {
       let d = dosyaDoc(dosyaId).data;
       return tutanakOk(data)
+        && d.get('visibleToRole', '') == ''
         && data.ownerId == d.ownerId;
     }
 
@@ -269,7 +291,7 @@ service cloud.firestore {
     }
 
     function clientOk(data) {
-      return data.keys().hasOnly(['id', 'clientName', 'clientNameNormalized', 'createdAt', 'updatedAt'])
+      return data.keys().hasOnly(['id', 'clientName', 'clientNameNormalized', 'special', 'createdAt', 'updatedAt'])
         && data.id == clientId
         && stringBetween(data.clientName, 2, 200)
         && stringBetween(data.clientNameNormalized, 2, 200)
@@ -406,14 +428,18 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
 
       match /expenses/{expenseId} {
-        allow read: if canAccessDosya(dosyaId);
-        allow create: if canAccessDosya(dosyaId) && expenseInDosyaOk(dosyaId, request.resource.data);
-        allow update: if canAccessDosya(dosyaId) && (
+        // Özel müvekkil dosyasında (Genel Giderler) herkes yalnızca kendi girdiği masrafı okuyabilir.
+        allow read: if canAccessDosya(dosyaId)
+          && (dosyaDoc(dosyaId).data.get('visibleToRole', '') == '' || resource.data.userId == request.auth.uid);
+        allow create: if canAccessDosya(dosyaId) && !request.resource.data.keys().hasAny(['deliveryStatus']) && expenseInDosyaOk(dosyaId, request.resource.data);
+        // Teslim edilen masraf mobilden değiştirilemez ya da silinemez.
+        allow update: if canAccessDosya(dosyaId) && resource.data.get('deliveryStatus', 'new') != 'delivered' && (
           softDeleteOnly()
           || (
             resource.data.ownerId == request.resource.data.ownerId
             && resource.data.userId == request.resource.data.userId
             && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.get('deliveryStatus', 'new') == resource.data.get('deliveryStatus', 'new')
             && keepsDeletedAt()
             && expenseInDosyaOk(dosyaId, request.resource.data)
           )
@@ -422,7 +448,9 @@ service cloud.firestore {
       }
 
       match /tutanaklar/{tutanakId} {
-        allow read: if canAccessDosya(dosyaId);
+        // Tutanak bildirimi alan her kullanıcı (bildirim kimliği = tutanak kimliği) tutanağı görüntüleyebilir.
+        allow read: if (signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)/notifications/$(tutanakId)))
+          || canAccessDosya(dosyaId);
         allow create: if canAccessDosya(dosyaId) && tutanakInDosyaOk(dosyaId, request.resource.data);
         allow update: if canAccessDosya(dosyaId)
           && resource.data.ownerId == request.resource.data.ownerId
